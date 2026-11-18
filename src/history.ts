@@ -33,8 +33,8 @@ export function tzFor(mode: TimeMode): TzFor {
 /** The first entry is the default. */
 export const TIME_MODES: { id: TimeMode; label: string }[] = [
   { id: 'kyiv', label: 'Kyiv time' },
-  { id: 'road', label: 'Local time on the road' },
   { id: 'local', label: 'My time' },
+  { id: 'road', label: 'Local Russian time (MSK)' },
 ];
 
 /** "UTC+3" for a zone at the given moment (default now). */
@@ -50,7 +50,7 @@ export function tzLabel(mode: TimeMode, roadIds: string[]): string {
   if (mode === 'local') return `your time, ${utcOffset(undefined)}`;
   if (mode === 'kyiv') return `Kyiv time, ${utcOffset(KYIV_TZ)}`;
   const offsets = new Set(roadIds.map((r) => utcOffset(roadTz(r))));
-  return offsets.size === 1 ? `local time, ${[...offsets][0]}` : 'local time of each road';
+  return offsets.size === 1 ? `MSK, ${[...offsets][0]}` : 'local time of each road';
 }
 
 export type Period = '1' | '3' | '7' | '30' | 'all';
