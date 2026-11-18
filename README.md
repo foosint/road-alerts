@@ -18,14 +18,14 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
 - **Alert history** in a card below the status panel, built from `alerts.json`:
   - **Log:** every activation, newest first and grouped by day. Each entry shows the time, the type (`Threat` or `All clear`) and the roads it covers. A threat shows how long it took until the road was cleared, "repeated before clear" if a new threat came first, or "active now". Click a road name to open that road.
   - **By hour:** alert count, number of roads affected, a chart of alerts per hour of the day, and a ranking of roads by alert count. A threat that covers several roads counts once in the chart.
-  - **One road:** click a road on the map or in a list. It is highlighted on the map, and the card shows its alert count, median time until clear, last alert, its own hour chart and its full history. **← All roads** goes back.
+  - **One road:** click a road on the map or in a list. It is highlighted on the map, and the card shows its alert count, median time until clear, last alert, its own hour chart and its full history. **← All roads**, a click elsewhere on the map, or the Escape key goes back.
   - **Period:** last 7 days, last 30 days or all time. It applies to all of the above.
   - **Time zone:** road time (Moscow time, UTC+3, the local time on these roads) or the viewer's own. It also applies to the times in the hover popups.
   - Only `threat` activations count as alerts in the counts and charts.
   - Each chart has a hover tooltip and a **Table** view.
 - **Town markers:** black dots that show the town name on hover, or on tap on touch screens.
 - **Status panel** with:
-  - a legend that counts segments per status;
+  - a legend with every status in `STATUS_COLORS`, even when no segment has it, and the number of segments per status;
   - when the feed was last updated (`source.updatedAt`);
   - the latest segment change (newest `updatedAt`);
   - when the page last checked for new data.

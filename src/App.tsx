@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import RoadMap, { BASEMAPS } from './RoadMap';
 import { POLL_MS, useRoadData } from './data';
-import { statusColor } from './colors';
+import { STATUS_COLORS, statusColor } from './colors';
 import AlertHistory from './AlertHistory';
 import { PERIODS, TIME_MODES, tzOf, type Period, type TimeMode } from './history';
 
@@ -42,21 +42,30 @@ export default function App() {
   const [now, setNow] = useState(Date.now());
   const [open, setOpen] = useState(true);
 
+  // Escape clears the selected road.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setSelectedId(null);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 10_000);
     return () => window.clearInterval(t);
   }, []);
 
-  // Legend: one row per status present in the data, with the colour the backend assigned.
+  // Legend: every known status in a fixed order (even with 0 roads), then any unknown status in the data.
   const legend = useMemo(() => {
-    const m = new Map<string, { color: string; count: number }>();
+    const m = new Map<string, { color: string; count: number }>(
+      Object.entries(STATUS_COLORS).map(([status, color]) => [status, { color, count: 0 }]),
+    );
     for (const f of roads?.features ?? []) {
       const { status, stroke } = f.properties;
       const e = m.get(status) ?? { color: statusColor(status, stroke), count: 0 };
       e.count += 1;
       m.set(status, e);
     }
-    return [...m.entries()].sort((a, b) => b[1].count - a[1].count);
+    return [...m.entries()]; // insertion order: STATUS_COLORS first
   }, [roads]);
 
   const latestSegment = useMemo(() => {
@@ -75,7 +84,10 @@ export default function App() {
         cities={cities}
         basemap={basemap}
         selectedId={selectedId}
-        onSelect={(id) => { setSelectedId(id); setOpen(true); }}
+        onSelect={(id) => {
+          setSelectedId(id);
+          if (id) setOpen(true);
+        }}
         timeZone={tzOf(timeMode)}
       />
 
@@ -91,7 +103,7 @@ export default function App() {
         {open && (
           <>
             <section className="legend">
-              {legend.length === 0 && <div className="muted">{error ? 'No data' : 'Loading…'}</div>}
+              {!roads && <div className="muted">{error ? 'No data' : 'Loading…'}</div>}
               {legend.map(([status, { color, count }]) => (
                 <div key={status} className="legend-row">
                   <span className="swatch" style={{ background: color }} />

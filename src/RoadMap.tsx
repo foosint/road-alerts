@@ -88,7 +88,8 @@ type Props = {
   basemap: string;
   /** Road highlighted on the map and shown in the history panel. */
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  /** Called with a road id on a road click, and with null on a click elsewhere on the map. */
+  onSelect: (id: string | null) => void;
   /** IANA zone for times in popups; undefined = the viewer's own. */
   timeZone: string | undefined;
 };
@@ -231,6 +232,10 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
         if (!p || overTown(e)) return;
         hoverPopup.remove();
         pending.current.onSelect(p.id);
+      });
+      // A click anywhere else on the map clears the selection (dragging doesn't fire click).
+      map.on('click', (e) => {
+        if (!map.queryRenderedFeatures(e.point, { layers: ['roads-hit'] }).length) pending.current.onSelect(null);
       });
 
       loaded.current = true;
