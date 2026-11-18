@@ -1,0 +1,41 @@
+name: Deploy to GitHub Pages
+
+# The road data is not part of this repo: the page fetches it at runtime from
+# the road-alerts-data repo, so this only runs when the app itself changes.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          # Override with a repository variable DATA_URL if the data lives elsewhere.
+          VITE_DATA_URL: ${{ vars.DATA_URL || format('https://raw.githubusercontent.com/{0}/road-alerts-data/main/data/', github.repository_owner) }}
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
