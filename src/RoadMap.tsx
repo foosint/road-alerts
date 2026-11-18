@@ -130,10 +130,37 @@ export default function RoadMap({ roads, cities, basemap }: Props) {
         source: 'cities',
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 3, 12, 6],
-          'circle-color': '#1f2933',
+          'circle-color': '#000000',
           'circle-stroke-color': '#ffffff',
           'circle-stroke-width': 1.5,
         },
+      });
+      // Invisible, larger circles so the small dots are easy to hover/tap.
+      map.addLayer({
+        id: 'cities-hit',
+        type: 'circle',
+        source: 'cities',
+        paint: { 'circle-radius': 10, 'circle-opacity': 0 },
+      });
+
+      // Town name tag on hover (tap on touch screens).
+      const tag = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        className: 'city-tag',
+        offset: 10,
+      });
+      const showTag = (e: maplibregl.MapLayerMouseEvent) => {
+        const f = e.features?.[0];
+        if (!f || f.geometry.type !== 'Point') return;
+        map.getCanvas().style.cursor = 'default';
+        tag.setLngLat(f.geometry.coordinates as [number, number]).setText(String(f.properties.name)).addTo(map);
+      };
+      map.on('mousemove', 'cities-hit', showTag);
+      map.on('click', 'cities-hit', showTag);
+      map.on('mouseleave', 'cities-hit', () => {
+        map.getCanvas().style.cursor = '';
+        tag.remove();
       });
 
       const popup = new maplibregl.Popup({ maxWidth: '320px' });
@@ -155,27 +182,6 @@ export default function RoadMap({ roads, cities, basemap }: Props) {
       mapRef.current = null;
     };
   }, []);
-
-  // City labels as DOM markers (no glyph server needed); hidden when zoomed far out.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !cities) return;
-    const markers = cities.features.map((f) => {
-      const el = document.createElement('div');
-      el.className = 'city-label';
-      el.textContent = f.properties.name;
-      return new maplibregl.Marker({ element: el, anchor: 'left', offset: [6, 0] })
-        .setLngLat(f.geometry.coordinates as [number, number])
-        .addTo(map);
-    });
-    const toggle = () => map.getContainer().classList.toggle('labels-hidden', map.getZoom() < 6.5);
-    toggle();
-    map.on('zoom', toggle);
-    return () => {
-      map.off('zoom', toggle);
-      markers.forEach((m) => m.remove());
-    };
-  }, [cities]);
 
   function apply(map: MlMap) {
     if (!loaded.current) return;

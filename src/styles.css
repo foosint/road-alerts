@@ -158,19 +158,25 @@ select option {
   color: var(--error);
 }
 
-/* City labels (DOM markers) */
-.city-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #111827;
-  text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff;
-  white-space: nowrap;
+/* Town name tag (hover popup) */
+.city-tag {
   pointer-events: none;
 }
 
-.labels-hidden .city-label {
-  display: none;
+.city-tag .maplibregl-popup-content {
+  background: #000;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
 }
+
+.city-tag.maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: #000; }
+.city-tag.maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: #000; }
+.city-tag.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: #000; }
+.city-tag.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: #000; }
 
 /* Road popup */
 .maplibregl-popup-content {
