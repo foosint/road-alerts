@@ -53,8 +53,10 @@ export function tzLabel(mode: TimeMode, roadIds: string[]): string {
   return offsets.size === 1 ? `local time, ${[...offsets][0]}` : 'local time of each road';
 }
 
-export type Period = '7' | '30' | 'all';
+export type Period = '1' | '3' | '7' | '30' | 'all';
 export const PERIODS: { id: Period; label: string }[] = [
+  { id: '1', label: 'Last day' },
+  { id: '3', label: 'Last 3 days' },
   { id: '7', label: 'Last 7 days' },
   { id: '30', label: 'Last 30 days' },
   { id: 'all', label: 'All time' },
