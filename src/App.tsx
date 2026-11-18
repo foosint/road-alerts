@@ -108,7 +108,7 @@ export default function App() {
               </select>
               <button onClick={refresh} disabled={loading}>{loading ? 'Checking…' : 'Refresh'}</button>
             </section>
-            <div className="muted small">Auto-refresh every {POLL_MS / 1000} s · click a road for details</div>
+            <div className="muted small">Auto-refresh every {POLL_MS / 1000} s · hover or click a road for details</div>
           </>
         )}
       </aside>

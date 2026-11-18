@@ -14,7 +14,7 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson
 ## Features
 
 - **Road segments** in the data's colour for each status: the `stroke` property. Segments with an alert status are drawn thicker than `neutral` ones.
-- **Segment details:** click a road to see from → to, status, last update, length, groups and the active alert, if there is one.
+- **Segment details:** hover a road, or click it to keep the details open, to see from → to, status, last update, length, groups and the active alert, if there is one.
 - **Town markers:** black dots that show the town name on hover, or on tap on touch screens.
 - **Status panel** with:
   - a legend that counts segments per status;

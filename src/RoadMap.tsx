@@ -163,13 +163,48 @@ export default function RoadMap({ roads, cities, basemap }: Props) {
         tag.remove();
       });
 
-      const popup = new maplibregl.Popup({ maxWidth: '320px' });
-      map.on('click', 'roads-line', (e) => {
-        const f = e.features?.[0];
-        if (f) popup.setLngLat(e.lngLat).setHTML(popupHtml(f.properties as RoadProps)).addTo(map);
+      // Invisible, wider lines so roads are easy to hover/click (kept below the town layers).
+      map.addLayer(
+        { id: 'roads-hit', type: 'line', source: 'roads', paint: { 'line-width': 12, 'line-opacity': 0 } },
+        'cities',
+      );
+
+      // Road details: a hover popup that follows the cursor, and a pinned popup on click.
+      const hoverPopup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        className: 'road-hover',
+        maxWidth: '320px',
+        offset: 14,
       });
-      map.on('mouseenter', 'roads-line', () => (map.getCanvas().style.cursor = 'pointer'));
-      map.on('mouseleave', 'roads-line', () => (map.getCanvas().style.cursor = ''));
+      const pinned = new maplibregl.Popup({ maxWidth: '320px' });
+      let pinnedId: string | null = null;
+      pinned.on('close', () => (pinnedId = null));
+
+      const overTown = (e: maplibregl.MapLayerMouseEvent) =>
+        map.queryRenderedFeatures(e.point, { layers: ['cities-hit'] }).length > 0;
+
+      map.on('mousemove', 'roads-hit', (e) => {
+        const f = e.features?.[0];
+        const p = f?.properties as RoadProps | undefined;
+        if (!p || overTown(e) || p.id === pinnedId) {
+          hoverPopup.remove();
+          return;
+        }
+        map.getCanvas().style.cursor = 'pointer';
+        hoverPopup.setLngLat(e.lngLat).setHTML(popupHtml(p)).addTo(map);
+      });
+      map.on('mouseleave', 'roads-hit', () => {
+        map.getCanvas().style.cursor = '';
+        hoverPopup.remove();
+      });
+      map.on('click', 'roads-hit', (e) => {
+        const p = e.features?.[0]?.properties as RoadProps | undefined;
+        if (!p || overTown(e)) return;
+        hoverPopup.remove();
+        pinned.setLngLat(e.lngLat).setHTML(popupHtml(p)).addTo(map);
+        pinnedId = p.id;
+      });
 
       loaded.current = true;
       apply(map);

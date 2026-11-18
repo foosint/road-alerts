@@ -158,6 +158,11 @@ select option {
   color: var(--error);
 }
 
+/* Road hover popup: must not catch the mouse, or it would flicker */
+.road-hover {
+  pointer-events: none;
+}
+
 /* Town name tag (hover popup) */
 .city-tag {
   pointer-events: none;
