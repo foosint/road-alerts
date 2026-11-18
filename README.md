@@ -8,7 +8,7 @@ The data isn't stored in this repo. The page fetches it at runtime from the [roa
 road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/alerts.json
             ▲                              │ raw.githubusercontent.com
    Pi pushes on change                     ▼
-                                road-alerts page polls every 60 s
+                                road-alerts page polls every 90 s
 ```
 
 ## Features
@@ -30,7 +30,7 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - the latest segment change (newest `updatedAt`);
   - when the page last checked for new data.
 - **Base maps:** OpenStreetMap, Esri Streets and Esri Imagery. The page remembers the base map, period and time zone for each browser.
-- **Auto-refresh.** The page fetches `roads.geojson`, `cities.geojson` and `alerts.json` every 60 seconds, when the tab becomes visible again, or when you press **Refresh**. Reloading the page also loads the latest data. The map only redraws when a file's content has changed.
+- **Auto-refresh.** The page fetches `roads.geojson`, `cities.geojson` and `alerts.json` every 90 seconds, when the tab becomes visible again, or when you press **Refresh**. Reloading the page also loads the latest data. The map only redraws when a file's content has changed.
 
 ## Where the data comes from
 
@@ -42,7 +42,13 @@ The data location is set at build time with `VITE_DATA_URL`, the folder URL with
 | `npm run dev` / `npm run preview` | `/data/`. Vite serves the `.geojson` and `.json` files from the sibling folder `../road-alerts-data/data` (or `../road-alerts-backend/data`), so local changes show up immediately. |
 | Anything else | Set `VITE_DATA_URL` in the environment or in a `.env.local` file. |
 
-`raw.githubusercontent.com` allows cross-site requests and caches files for up to 5 minutes. Each request adds a unique query parameter to get past that cache, but in the worst case new data appears a few minutes late.
+`raw.githubusercontent.com` allows cross-site requests, but it caches a branch URL (`…/main/data/…`) for up to 5 minutes and ignores query strings, so it can serve old data. To avoid that, each check works like this:
+
+1. It asks the GitHub API for the latest commit on the branch: `api.github.com/repos/<owner>/road-alerts-data/commits/main`, a tiny reply with just the commit hash.
+2. If the commit hasn't changed, nothing more is loaded.
+3. Otherwise it loads the files from the commit URL `raw.githubusercontent.com/<owner>/road-alerts-data/<hash>/data/…`. That URL always serves exactly that commit, so new data shows up as soon as the Pi has pushed it.
+
+Without a login, the GitHub API allows 60 requests an hour per IP address. Every check counts, including "not modified" replies. That's why the page checks every 90 seconds. If the limit is reached, for example with many open tabs or many visitors behind one shared IP, the page falls back to the branch URL until the limit resets. Data can then be up to 5 minutes old again.
 
 ## Development
 
