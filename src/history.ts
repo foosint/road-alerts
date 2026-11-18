@@ -53,8 +53,9 @@ export function tzLabel(mode: TimeMode, roadIds: string[]): string {
   return offsets.size === 1 ? `MSK, ${[...offsets][0]}` : 'local time of each road';
 }
 
-export type Period = '1' | '3' | '7' | '30' | 'all';
+export type Period = 'today' | '1' | '3' | '7' | '30' | 'all';
 export const PERIODS: { id: Period; label: string }[] = [
+  { id: 'today', label: 'Today' },
   { id: '1', label: 'Last day' },
   { id: '3', label: 'Last 3 days' },
   { id: '7', label: 'Last 7 days' },
@@ -137,8 +138,27 @@ export function episodeMs(e: Episode, now = Date.now()): number | null {
   return (e.end ? Date.parse(e.end) : now) - Date.parse(e.start);
 }
 
-export function inPeriod(list: Episode[], period: Period, now = Date.now()): Episode[] {
+const dayFormatters = new Map<string, Intl.DateTimeFormat>();
+/** Calendar day (YYYY-MM-DD) of a moment in a time zone. */
+function dayKey(t: string | number, tz: string | undefined): string {
+  const key = tz ?? 'local';
+  let f = dayFormatters.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+    dayFormatters.set(key, f);
+  }
+  return f.format(new Date(t));
+}
+
+/**
+ * Alerts that began in the period, plus any still running. "today" means since midnight
+ * in the selected time zone (for each alert, the zone of its road).
+ */
+export function inPeriod(list: Episode[], period: Period, now: number, tz: TzFor): Episode[] {
   if (period === 'all') return list;
+  if (period === 'today') {
+    return list.filter((e) => e.how === 'ongoing' || dayKey(e.start, tz(e.road)) === dayKey(now, tz(e.road)));
+  }
   const from = now - Number(period) * 86_400_000;
   return list.filter((e) => Date.parse(e.start) >= from || e.how === 'ongoing'); // began in the period, or still running
 }
@@ -191,3 +211,29 @@ export const roadName = (alerts: AlertsData | null, id: string, fallback?: { fro
   const r = fallback ?? alerts?.roads[id];
   return r ? `${r.from} → ${r.to}` : id;
 };
+
+// ---------------------------------------------------------------- playback
+
+/** Midnight at the start of the day containing `t`, in the given time zone (epoch ms). */
+export function startOfDay(t: number, tz: string | undefined): number {
+  const [y, m, d] = dayKey(t, tz).split('-').map(Number);
+  const guess = Date.UTC(y, m - 1, d); // midnight UTC of that calendar day
+  // Shift by the zone's offset at that moment: wall-clock time in tz minus UTC.
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric',
+  }).formatToParts(new Date(guess));
+  const n = (type: string) => Number(parts.find((x) => x.type === type)?.value);
+  const wall = Date.UTC(n('year'), n('month') - 1, n('day'), n('hour'), n('minute'), n('second'));
+  return guess - (wall - guess);
+}
+
+/** Roads with a running alert at moment `t`. Alerts with an unknown end are left out. */
+export function busyAt(list: Episode[], t: number): Set<string> {
+  const busy = new Set<string>();
+  for (const e of list) {
+    if (e.how === 'unknown' || Date.parse(e.start) > t) continue;
+    if (e.end === null || Date.parse(e.end) > t) busy.add(e.road);
+  }
+  return busy;
+}

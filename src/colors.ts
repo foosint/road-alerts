@@ -14,10 +14,14 @@ export function statusColor(status: string, stroke?: string): string {
   return STATUS_COLORS[status] ?? stroke ?? FALLBACK;
 }
 
-/** The same rule as a MapLibre expression. */
-export const STATUS_COLOR_EXPR: ExpressionSpecification = [
-  'match',
-  ['get', 'status'],
-  ...Object.entries(STATUS_COLORS).flat(),
-  ['coalesce', ['get', 'stroke'], FALLBACK],
-] as unknown as ExpressionSpecification;
+/** The same rule as a MapLibre expression, for a given expression that yields the status. */
+export function statusColorExpr(status: ExpressionSpecification): ExpressionSpecification {
+  return [
+    'match',
+    status,
+    ...Object.entries(STATUS_COLORS).flat(),
+    ['coalesce', ['get', 'stroke'], FALLBACK],
+  ] as unknown as ExpressionSpecification;
+}
+
+export const STATUS_COLOR_EXPR = statusColorExpr(['get', 'status']);

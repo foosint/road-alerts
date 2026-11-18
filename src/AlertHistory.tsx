@@ -35,7 +35,7 @@ export default function AlertHistory(p: Props) {
     () => episodes(alerts, (id) => roads?.features.find((f) => f.properties.id === id)?.properties.status),
     [alerts, roads],
   );
-  const list = useMemo(() => inPeriod(all, period, now), [all, period, now]);
+  const list = useMemo(() => inPeriod(all, period, now, tz), [all, period, now, timeMode]); // eslint-disable-line react-hooks/exhaustive-deps
   const since = alerts?.events[0]?.at;
 
   const controls = (

@@ -24,7 +24,7 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - **Older alerts:** the alert log records alert ends from `statusSince` on. Older alerts without an all clear show "end not recorded" and "(duration unknown)".
   - **By hour:** number of alerts, roads affected and alerts active now, a chart of when alerts began by hour of the day, and a ranking of roads by number of alerts.
   - **One road:** click a road on the map or in a list. It is highlighted on the map, and the card shows its number of alerts, median duration, last alert, its own hour chart and its full history. **← All roads**, a click elsewhere on the map, or the Escape key goes back.
-  - **Period:** last day (24 hours), last 3 days, last 7 days, last 30 days or all time (default). It applies to all of the above and selects alerts by the time they began. Running alerts are always included.
+  - **Period:** today (since midnight in the selected time zone), last day (24 hours), last 3 days, last 7 days, last 30 days or all time (default). It applies to all of the above and selects alerts by the time they began. Running alerts are always included.
   - **Time zone:** *Kyiv time* (default) uses Ukraine's official time (UTC+2, UTC+3 in summer). *My time* uses the viewer's own zone. *Local Russian time (MSK)* shows the clock time in use where the road is: Moscow time, UTC+3 all year. In winter it is an hour ahead of Kyiv time; in summer they match. The labels name the offset, e.g. "Kyiv time, UTC+2" or "MSK, UTC+3". The setting also applies to the times in the hover popups. All roads in the feed currently keep UTC+3 all year. A road with a different zone can be added to `ROAD_TZ_BY_ROAD` in [src/history.ts](src/history.ts).
   - The counts and charts are per road: an activation that covers two roads counts as two alerts.
   - Each chart has a hover tooltip and a **Table** view.
@@ -34,7 +34,16 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - when the feed was last updated (`source.updatedAt`);
   - the latest segment change (newest `updatedAt`);
   - when the page last checked for new data.
-- **Base maps:** OpenStreetMap, Esri Streets and Esri Imagery. The page remembers the base map, period and time zone for each browser.
+- **Base maps:** OpenStreetMap, Esri Streets and Esri Imagery.
+- **Playback:** press **Playback** in the panel to replay the alerts of today or of the last 1, 3, 7 or 30 days.
+  - A bar over the map has play/pause, a time slider, the range and the speed (5 min to 12 h of alert time per second).
+  - The map colours each road by its status at the shown time, and the legend counts those statuses. The bar also shows how many alerts were active.
+  - Red ticks above the slider mark when alerts began.
+  - The clock and "Today" follow the selected time zone.
+  - **Live** or ✕ returns to the current state.
+  - Playback uses the per-road alerts from the log, so alerts with an unknown end (from before `statusSince`) are not shown.
+- **Theme switch:** the button next to the title cycles through system (◐, follows the device setting), light (☀) and dark (☾). This sets the colours of the panels; the base map stays the same.
+- **Saved settings:** the page remembers the base map, period, time zone and theme for each browser.
 - **Auto-refresh.** The page fetches `roads.geojson`, `cities.geojson` and `alerts.json` every 90 seconds, when the tab becomes visible again, or when you press **Refresh**. Reloading the page also loads the latest data. The map only redraws when a file's content has changed.
 
 ## Where the data comes from

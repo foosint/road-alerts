@@ -6,7 +6,7 @@ import maplibregl, {
   type StyleSpecification,
 } from 'maplibre-gl';
 import type { CitiesData, RoadProps, RoadsData } from './data';
-import { STATUS_COLOR_EXPR, statusColor } from './colors';
+import { statusColor, statusColorExpr } from './colors';
 import { fmtTime, type TzFor } from './history';
 
 export type Basemap = { id: string; label: string; tiles: string[]; attribution: string };
@@ -37,7 +37,9 @@ const EMPTY = { type: 'FeatureCollection' as const, features: [] };
 const fitPadding = (p: number) =>
   window.innerWidth > 700 ? { top: p, bottom: p, right: p, left: 344 + p } : p;
 
-const IS_NEUTRAL: ExpressionSpecification = ['==', ['get', 'status'], 'neutral'];
+/** A road's status: the playback status (feature-state "pb") while playing back, else the live one. */
+const STATUS: ExpressionSpecification = ['coalesce', ['feature-state', 'pb'], ['get', 'status']];
+const IS_NEUTRAL: ExpressionSpecification = ['==', STATUS, 'neutral'];
 
 function baseStyle(active: string): StyleSpecification {
   return {
@@ -90,17 +92,19 @@ type Props = {
   selectedId: string | null;
   /** Called with a road id on a road click, and with null on a click elsewhere on the map. */
   onSelect: (id: string | null) => void;
+  /** Status per road id during playback; null = live. */
+  playbackStatus: Record<string, string> | null;
   /** Time zone for a road's times in popups (undefined = the viewer's own). */
   timeZoneFor: TzFor;
 };
 
-export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, timeZoneFor }: Props) {
+export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, timeZoneFor, playbackStatus }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const loaded = useRef(false);
   const fitted = useRef(false);
-  const pending = useRef<Props>({ roads, cities, basemap, selectedId, onSelect, timeZoneFor });
-  pending.current = { roads, cities, basemap, selectedId, onSelect, timeZoneFor };
+  const pending = useRef<Props>({ roads, cities, basemap, selectedId, onSelect, timeZoneFor, playbackStatus });
+  pending.current = { roads, cities, basemap, selectedId, onSelect, timeZoneFor, playbackStatus };
 
   // Create the map once.
   useEffect(() => {
@@ -116,7 +120,7 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right'); // the sidebar covers the left edge
 
     map.on('load', () => {
-      map.addSource('roads', { type: 'geojson', data: EMPTY });
+      map.addSource('roads', { type: 'geojson', data: EMPTY, promoteId: 'id' }); // ids for feature-state
       map.addSource('cities', { type: 'geojson', data: EMPTY });
       // Dark halo under the selected road.
       map.addLayer({
@@ -148,7 +152,7 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
         source: 'roads',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-          'line-color': STATUS_COLOR_EXPR,
+          'line-color': statusColorExpr(STATUS),
           'line-width': ['interpolate', ['linear'], ['zoom'], 5, ['case', IS_NEUTRAL, 2, 4], 12, ['case', IS_NEUTRAL, 5, 8]],
         },
       });
@@ -252,10 +256,12 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
 
   function apply(map: MlMap) {
     if (!loaded.current) return;
-    const { roads: r, cities: c, basemap: b, selectedId: sel } = pending.current;
+    const { roads: r, cities: c, basemap: b, selectedId: sel, playbackStatus: pb } = pending.current;
     map.setFilter('roads-selected', ['==', ['get', 'id'], sel ?? '']);
     for (const bm of BASEMAPS) map.setLayoutProperty(`base-${bm.id}`, 'visibility', bm.id === b ? 'visible' : 'none');
     if (r) (map.getSource('roads') as GeoJSONSource).setData(r);
+    if (pb) for (const [id, status] of Object.entries(pb)) map.setFeatureState({ source: 'roads', id }, { pb: status });
+    else map.removeFeatureState({ source: 'roads' });
     if (c) (map.getSource('cities') as GeoJSONSource).setData(c);
     if (r && !fitted.current && r.features.length) {
       const bounds = new maplibregl.LngLatBounds();
@@ -267,7 +273,7 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
 
   useEffect(() => {
     if (mapRef.current) apply(mapRef.current);
-  }, [roads, cities, basemap, selectedId]);
+  }, [roads, cities, basemap, selectedId, playbackStatus]);
 
   // Bring a road selected from the list into view (no move if it is already visible).
   useEffect(() => {

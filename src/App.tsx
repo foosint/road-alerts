@@ -3,7 +3,8 @@ import RoadMap, { BASEMAPS } from './RoadMap';
 import { POLL_MS, useRoadData } from './data';
 import { STATUS_COLORS, statusColor } from './colors';
 import AlertHistory from './AlertHistory';
-import { PERIODS, TIME_MODES, tzFor, type Period, type TimeMode } from './history';
+import Playback from './Playback';
+import { PERIODS, TIME_MODES, episodes, tzFor, tzLabel, type Period, type TimeMode } from './history';
 
 // Per-browser preferences.
 function readPref<T extends string>(key: string, allowed: readonly T[]): T {
@@ -21,6 +22,12 @@ function usePref<T extends string>(key: string, allowed: readonly T[]) {
   return [v, (x: T) => { setV(x); writePref(key, x); }] as const;
 }
 const BASEMAP_IDS = BASEMAPS.map((b) => b.id);
+
+// Theme switch: auto follows the system setting.
+type Theme = 'auto' | 'light' | 'dark';
+const THEMES: Theme[] = ['auto', 'light', 'dark'];
+const THEME_ICON: Record<Theme, string> = { auto: '◐', light: '☀', dark: '☾' };
+const THEME_LABEL: Record<Theme, string> = { auto: 'Theme: system', light: 'Theme: light', dark: 'Theme: dark' };
 const TIME_IDS = TIME_MODES.map((m) => m.id);
 const PERIOD_IDS: Period[] = ['all', ...PERIODS.map((x) => x.id).filter((x) => x !== 'all')];
 
@@ -38,7 +45,24 @@ export default function App() {
   const [basemap, chooseBasemap] = usePref('road-alerts.basemap', BASEMAP_IDS);
   const [timeMode, setTimeMode] = usePref<TimeMode>('road-alerts.time', TIME_IDS);
   const [period, setPeriod] = usePref<Period>('road-alerts.period', PERIOD_IDS);
+  const [theme, setTheme] = usePref<Theme>('road-alerts.theme', THEMES);
+
+  useEffect(() => {
+    if (theme === 'auto') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+  }, [theme]);
+  const nextTheme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [playbackOn, setPlaybackOn] = useState(false);
+  const [pbStatus, setPbStatus] = useState<Record<string, string> | null>(null);
+  const allEpisodes = useMemo(
+    () => episodes(alerts, (id) => roads?.features.find((f) => f.properties.id === id)?.properties.status),
+    [alerts, roads],
+  );
+  const closePlayback = () => {
+    setPlaybackOn(false);
+    setPbStatus(null);
+  };
   const [now, setNow] = useState(Date.now());
   const [open, setOpen] = useState(true);
 
@@ -60,13 +84,14 @@ export default function App() {
       Object.entries(STATUS_COLORS).map(([status, color]) => [status, { color, count: 0 }]),
     );
     for (const f of roads?.features ?? []) {
-      const { status, stroke } = f.properties;
+      const { stroke } = f.properties;
+      const status = pbStatus?.[f.properties.id] ?? f.properties.status; // playback: status at that time
       const e = m.get(status) ?? { color: statusColor(status, stroke), count: 0 };
       e.count += 1;
       m.set(status, e);
     }
     return [...m.entries()]; // insertion order: STATUS_COLORS first
-  }, [roads]);
+  }, [roads, pbStatus]);
 
   const latestSegment = useMemo(() => {
     let max = 0;
@@ -89,15 +114,37 @@ export default function App() {
           if (id) setOpen(true);
         }}
         timeZoneFor={tzFor(timeMode)}
+        playbackStatus={pbStatus}
       />
+
+      {playbackOn && (
+        <Playback
+          episodes={allEpisodes}
+          tz={tzFor(timeMode)()}
+          tzName={tzLabel(timeMode, [])}
+          now={now}
+          onStatus={setPbStatus}
+          onClose={closePlayback}
+        />
+      )}
 
       <div className="sidebar">
       <aside className={`panel ${open ? '' : 'collapsed'}`}>
         <header>
           <h1>Road Alerts</h1>
-          <button className="icon" onClick={() => setOpen(!open)} aria-label={open ? 'Collapse' : 'Expand'}>
-            {open ? '−' : '+'}
-          </button>
+          <div className="header-buttons">
+            <button
+              className="icon"
+              onClick={() => setTheme(nextTheme)}
+              title={`${THEME_LABEL[theme]} (click for ${nextTheme})`}
+              aria-label={`${THEME_LABEL[theme]}. Switch to ${nextTheme}`}
+            >
+              {THEME_ICON[theme]}
+            </button>
+            <button className="icon" onClick={() => setOpen(!open)} aria-label={open ? 'Collapse' : 'Expand'}>
+              {open ? '−' : '+'}
+            </button>
+          </div>
         </header>
 
         {open && (
@@ -137,6 +184,13 @@ export default function App() {
                 ))}
               </select>
               <button onClick={refresh} disabled={loading}>{loading ? 'Checking…' : 'Refresh'}</button>
+              <button
+                onClick={() => (playbackOn ? closePlayback() : setPlaybackOn(true))}
+                aria-pressed={playbackOn}
+                title="Replay the alerts of today or the past days"
+              >
+                {playbackOn ? 'Live' : 'Playback'}
+              </button>
             </section>
             <div className="muted small">Auto-refresh every {POLL_MS / 1000} s · hover a road for details, click it for its alert history</div>
           </>
