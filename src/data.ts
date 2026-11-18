@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FeatureCollection, LineString, Point } from 'geojson';
+import { twoState } from './colors';
 
 export type RoadProps = {
   id: string;
@@ -114,7 +115,9 @@ export function useRoadData() {
       // Only hand new objects to the map when the file content actually changed.
       if (r !== last.current.roads) {
         last.current.roads = r;
-        setRoads(JSON.parse(r));
+        const parsed: RoadsData = JSON.parse(r);
+        for (const f of parsed.features) f.properties.status = twoState(f.properties.status);
+        setRoads(parsed);
         setChangedAt(new Date());
       }
       if (c !== last.current.cities) {

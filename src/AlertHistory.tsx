@@ -109,14 +109,14 @@ export default function AlertHistory(p: Props) {
   );
 }
 
-/** "until 14:59 · all clear", "ongoing", … */
+/** "until 14:59", "ongoing", … */
 function endText(e: Episode, tz: string | undefined, statusSince?: string) {
   if (e.how === 'ongoing') return 'ongoing';
   if (e.how === 'unknown') {
     return statusSince && e.start < statusSince ? 'end not recorded' : 'end unknown';
   }
   const sameDay = fmtDay(e.start, tz) === fmtDay(e.end!, tz);
-  return `until ${fmtTime(e.end, tz, !sameDay)}${e.how === 'clear' ? ' · all clear' : ''}`;
+  return `until ${fmtTime(e.end, tz, !sameDay)}`;
 }
 
 /** One entry per alert per road, newest first, grouped by the day it began. */

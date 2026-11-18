@@ -68,8 +68,8 @@ export const isThreat = (e: AlertEvent) => e.intent === 'threat';
 /**
  * One alert on one road: from its first threat until it ended.
  *
- * - clear:   ended by an "all clear" activation
- * - ended:   the road went back to neutral without an all clear (the usual case)
+ * - ended:   the road went back to neutral (by an "all clear" activation or a status change,
+ *            whichever came first)
  * - ongoing: the road is still busy
  * - unknown: no end was recorded (only possible before `statusSince`, when status
  *            changes were not logged yet, or if the road left the feed)
@@ -82,7 +82,7 @@ export type Episode = {
   road: string;
   start: string;
   end: string | null;
-  how: 'clear' | 'ended' | 'ongoing' | 'unknown';
+  how: 'ended' | 'ongoing' | 'unknown';
   renewals: number;
 };
 
@@ -101,7 +101,7 @@ export function episodes(alerts: AlertsData | null, statusNow: (road: string) =>
     for (const road of e.roads) add(road, { at: e.at, kind: e.intent, id: e.id });
   }
   for (const c of alerts.changes ?? []) {
-    if (c.status === 'neutral') add(c.road, { at: c.at, kind: 'neutral', id: `s${c.at}` });
+    if (c.status !== 'busy') add(c.road, { at: c.at, kind: 'neutral', id: `s${c.at}` });
   }
 
   const out: Episode[] = [];
@@ -118,14 +118,14 @@ export function episodes(alerts: AlertsData | null, statusNow: (road: string) =>
         open = { key: `${it.id}|${road}`, road, start: it.at, end: null, how: 'unknown', renewals: 0 };
       } else if (open) {
         open.end = it.at;
-        open.how = it.kind === 'clear' ? 'clear' : 'ended';
+        open.how = 'ended';
         out.push(open);
         open = null;
       }
     }
     if (open) {
       const s = statusNow(road);
-      if (s && s !== 'neutral') open.how = 'ongoing';
+      if (s === 'busy') open.how = 'ongoing';
       out.push(open);
     }
   }

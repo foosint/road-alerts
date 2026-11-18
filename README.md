@@ -13,14 +13,14 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
 
 ## Features
 
-- **Road segments** coloured by status. The colours are set in `STATUS_COLORS` in [src/colors.ts](src/colors.ts). Statuses not listed there use the `stroke` colour from the data. Segments with an alert status are drawn thicker than `neutral` ones.
+- **Road segments** in two states: **busy** (red, drawn thicker) or **neutral** (green). The page maps every status from the feed to one of these two: `busy` stays busy, and anything else (`neutral`, an all clear, an unknown status) counts as neutral. The colours are set in `STATUS_COLORS` in [src/colors.ts](src/colors.ts).
 - **Segment details:** hover a road to see from → to, status, last update, length, groups and the active alert, if there is one.
 - **Alert history** in a card below the status panel, built from `alerts.json`:
   - **Log:** one entry per alert per road, newest first and grouped by the day it began. An activation that covers three roads gives three entries. Each entry shows:
     - the start time and the road (click it to open that road);
     - how long the alert lasted, in green, e.g. `Threat (was active for 56 min)`. While the alert is still running, it shows `(active for 12 min)` in red and counts up.
-    - how it ended: `until 18:57` when the road went back to neutral, `until 18:57 · all clear` when an all clear came, or `ongoing`.
-  - **When an alert ends:** the road turns neutral again, or an all clear comes, whichever happens first. A new threat on a road that is still busy extends the running alert ("renewed 1×") instead of starting a new one.
+    - when it ended (`until 18:57`) or `ongoing`.
+  - **When an alert ends:** when the road is neutral again. An all clear counts the same as the road returning to neutral, whichever comes first. A new threat on a road that is still busy extends the running alert ("renewed 1×") instead of starting a new one.
   - **Older alerts:** the alert log records alert ends from `statusSince` on. Older alerts without an all clear show "end not recorded" and "(duration unknown)".
   - **By hour:** number of alerts, roads affected and alerts active now, a chart of when alerts began by hour of the day, and a ranking of roads by number of alerts.
   - **One road:** click a road on the map or in a list. It is highlighted on the map, and the card shows its number of alerts, median duration, last alert, its own hour chart and its full history. **← All roads**, a click elsewhere on the map, or the Escape key goes back.
