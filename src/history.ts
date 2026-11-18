@@ -14,9 +14,25 @@ const ROAD_TZ_BY_ROAD: Record<string, string> = {};
 export type TzFor = (roadId?: string) => string | undefined;
 export const roadTz: TzFor = (roadId) => (roadId && ROAD_TZ_BY_ROAD[roadId]) || ROAD_TZ;
 
-export type TimeMode = 'road' | 'local';
-export const tzFor = (mode: TimeMode): TzFor => (mode === 'road' ? roadTz : () => undefined);
+/** Kyiv time (UTC+2, UTC+3 in summer). Older browsers only know the old name Europe/Kiev. */
+export const KYIV_TZ = (() => {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: 'Europe/Kyiv' });
+    return 'Europe/Kyiv';
+  } catch {
+    return 'Europe/Kiev';
+  }
+})();
+
+export type TimeMode = 'road' | 'kyiv' | 'local';
+export function tzFor(mode: TimeMode): TzFor {
+  if (mode === 'road') return roadTz;
+  if (mode === 'kyiv') return () => KYIV_TZ;
+  return () => undefined;
+}
+/** The first entry is the default. */
 export const TIME_MODES: { id: TimeMode; label: string }[] = [
+  { id: 'kyiv', label: 'Kyiv time' },
   { id: 'road', label: 'Local time on the road' },
   { id: 'local', label: 'My time' },
 ];
@@ -32,6 +48,7 @@ export function utcOffset(tz: string | undefined, at = new Date()): string {
 /** Label for times shown with tzFor(mode) for the given roads. */
 export function tzLabel(mode: TimeMode, roadIds: string[]): string {
   if (mode === 'local') return `your time, ${utcOffset(undefined)}`;
+  if (mode === 'kyiv') return `Kyiv time, ${utcOffset(KYIV_TZ)}`;
   const offsets = new Set(roadIds.map((r) => utcOffset(roadTz(r))));
   return offsets.size === 1 ? `local time, ${[...offsets][0]}` : 'local time of each road';
 }
