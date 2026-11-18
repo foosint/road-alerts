@@ -6,6 +6,8 @@ import maplibregl, {
   type StyleSpecification,
 } from 'maplibre-gl';
 import type { CitiesData, RoadProps, RoadsData } from './data';
+import { STATUS_COLOR_EXPR, statusColor } from './colors';
+import { fmtTime } from './history';
 
 export type Basemap = { id: string; label: string; tiles: string[]; attribution: string };
 
@@ -31,6 +33,10 @@ export const BASEMAPS: Basemap[] = [
 ];
 
 const EMPTY = { type: 'FeatureCollection' as const, features: [] };
+/** Keep fitted roads clear of the left sidebar on wide screens. */
+const fitPadding = (p: number) =>
+  window.innerWidth > 700 ? { top: p, bottom: p, right: p, left: 344 + p } : p;
+
 const IS_NEUTRAL: ExpressionSpecification = ['==', ['get', 'status'], 'neutral'];
 
 function baseStyle(active: string): StyleSpecification {
@@ -51,9 +57,7 @@ function baseStyle(active: string): StyleSpecification {
 const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-const fmtTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
-
-function popupHtml(p: RoadProps) {
+function popupHtml(p: RoadProps, tz: string | undefined, hint = false) {
   // MapLibre serialises nested properties to JSON strings.
   let alert = p.activeAlert;
   if (typeof alert === 'string') {
@@ -66,26 +70,36 @@ function popupHtml(p: RoadProps) {
   return `
     <div class="popup">
       <div class="popup-title">${esc(p.from)} → ${esc(p.to)}</div>
-      <div class="popup-status" style="--c:${esc(p.stroke)}">${esc(p.status)}</div>
+      <div class="popup-status" style="--c:${esc(statusColor(p.status, p.stroke))}">${esc(p.status)}</div>
       <table>
-        <tr><th>Updated</th><td>${esc(fmtTime(p.updatedAt))}</td></tr>
+        <tr><th>Updated</th><td>${esc(fmtTime(p.updatedAt, tz))}</td></tr>
         <tr><th>Length</th><td>${esc(p.distance_km)} km</td></tr>
         <tr><th>Groups</th><td>${esc(Array.isArray(groups) ? groups.join(', ') : groups)}</td></tr>
         <tr><th>ID</th><td>${esc(p.id)}</td></tr>
       </table>
       ${alert ? `<pre>${esc(JSON.stringify(alert, null, 2))}</pre>` : ''}
+      ${hint ? '<div class="popup-hint">Click for alert history</div>' : ''}
     </div>`;
 }
 
-type Props = { roads: RoadsData | null; cities: CitiesData | null; basemap: string };
+type Props = {
+  roads: RoadsData | null;
+  cities: CitiesData | null;
+  basemap: string;
+  /** Road highlighted on the map and shown in the history panel. */
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  /** IANA zone for times in popups; undefined = the viewer's own. */
+  timeZone: string | undefined;
+};
 
-export default function RoadMap({ roads, cities, basemap }: Props) {
+export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, timeZone }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const loaded = useRef(false);
   const fitted = useRef(false);
-  const pending = useRef<Props>({ roads, cities, basemap });
-  pending.current = { roads, cities, basemap };
+  const pending = useRef<Props>({ roads, cities, basemap, selectedId, onSelect, timeZone });
+  pending.current = { roads, cities, basemap, selectedId, onSelect, timeZone };
 
   // Create the map once.
   useEffect(() => {
@@ -98,11 +112,24 @@ export default function RoadMap({ roads, cities, basemap }: Props) {
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
-    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
+    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right'); // the sidebar covers the left edge
 
     map.on('load', () => {
       map.addSource('roads', { type: 'geojson', data: EMPTY });
       map.addSource('cities', { type: 'geojson', data: EMPTY });
+      // Dark halo under the selected road.
+      map.addLayer({
+        id: 'roads-selected',
+        type: 'line',
+        source: 'roads',
+        filter: ['==', ['get', 'id'], ''],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#111827',
+          'line-opacity': 0.85,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 11, 12, 18],
+        },
+      });
       map.addLayer({
         id: 'roads-casing',
         type: 'line',
@@ -120,7 +147,7 @@ export default function RoadMap({ roads, cities, basemap }: Props) {
         source: 'roads',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-          'line-color': ['coalesce', ['get', 'stroke'], '#8a8f98'],
+          'line-color': STATUS_COLOR_EXPR,
           'line-width': ['interpolate', ['linear'], ['zoom'], 5, ['case', IS_NEUTRAL, 2, 4], 12, ['case', IS_NEUTRAL, 5, 8]],
         },
       });
@@ -169,7 +196,8 @@ export default function RoadMap({ roads, cities, basemap }: Props) {
         'cities',
       );
 
-      // Road details: a hover popup that follows the cursor, and a pinned popup on click.
+      // Road details in a hover popup that follows the cursor; a click selects the road
+      // (highlight + alert history in the side panel).
       const hoverPopup = new maplibregl.Popup({
         closeButton: false,
         closeOnClick: false,
@@ -177,9 +205,6 @@ export default function RoadMap({ roads, cities, basemap }: Props) {
         maxWidth: '320px',
         offset: 14,
       });
-      const pinned = new maplibregl.Popup({ maxWidth: '320px' });
-      let pinnedId: string | null = null;
-      pinned.on('close', () => (pinnedId = null));
 
       const overTown = (e: maplibregl.MapLayerMouseEvent) =>
         map.queryRenderedFeatures(e.point, { layers: ['cities-hit'] }).length > 0;
@@ -187,12 +212,15 @@ export default function RoadMap({ roads, cities, basemap }: Props) {
       map.on('mousemove', 'roads-hit', (e) => {
         const f = e.features?.[0];
         const p = f?.properties as RoadProps | undefined;
-        if (!p || overTown(e) || p.id === pinnedId) {
+        if (!p || overTown(e)) {
           hoverPopup.remove();
           return;
         }
         map.getCanvas().style.cursor = 'pointer';
-        hoverPopup.setLngLat(e.lngLat).setHTML(popupHtml(p)).addTo(map);
+        hoverPopup
+          .setLngLat(e.lngLat)
+          .setHTML(popupHtml(p, pending.current.timeZone, p.id !== pending.current.selectedId))
+          .addTo(map);
       });
       map.on('mouseleave', 'roads-hit', () => {
         map.getCanvas().style.cursor = '';
@@ -202,8 +230,7 @@ export default function RoadMap({ roads, cities, basemap }: Props) {
         const p = e.features?.[0]?.properties as RoadProps | undefined;
         if (!p || overTown(e)) return;
         hoverPopup.remove();
-        pinned.setLngLat(e.lngLat).setHTML(popupHtml(p)).addTo(map);
-        pinnedId = p.id;
+        pending.current.onSelect(p.id);
       });
 
       loaded.current = true;
@@ -220,21 +247,34 @@ export default function RoadMap({ roads, cities, basemap }: Props) {
 
   function apply(map: MlMap) {
     if (!loaded.current) return;
-    const { roads: r, cities: c, basemap: b } = pending.current;
+    const { roads: r, cities: c, basemap: b, selectedId: sel } = pending.current;
+    map.setFilter('roads-selected', ['==', ['get', 'id'], sel ?? '']);
     for (const bm of BASEMAPS) map.setLayoutProperty(`base-${bm.id}`, 'visibility', bm.id === b ? 'visible' : 'none');
     if (r) (map.getSource('roads') as GeoJSONSource).setData(r);
     if (c) (map.getSource('cities') as GeoJSONSource).setData(c);
     if (r && !fitted.current && r.features.length) {
       const bounds = new maplibregl.LngLatBounds();
       r.features.forEach((f) => f.geometry.coordinates.forEach((pt) => bounds.extend(pt as [number, number])));
-      map.fitBounds(bounds, { padding: 40, duration: 0 });
+      map.fitBounds(bounds, { padding: fitPadding(40), duration: 0 });
       fitted.current = true;
     }
   }
 
   useEffect(() => {
     if (mapRef.current) apply(mapRef.current);
-  }, [roads, cities, basemap]);
+  }, [roads, cities, basemap, selectedId]);
+
+  // Bring a road selected from the list into view (no move if it is already visible).
+  useEffect(() => {
+    const map = mapRef.current;
+    const f = roads?.features.find((x) => x.properties.id === selectedId);
+    if (!map || !f) return;
+    const bounds = new maplibregl.LngLatBounds();
+    f.geometry.coordinates.forEach((pt) => bounds.extend(pt as [number, number]));
+    const view = map.getBounds();
+    if (view.contains(bounds.getSouthWest()) && view.contains(bounds.getNorthEast())) return;
+    map.fitBounds(bounds, { padding: fitPadding(60), maxZoom: 10, duration: 600 });
+  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <div ref={container} className="map" />;
 }

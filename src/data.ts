@@ -23,6 +23,15 @@ export type RoadsData = FeatureCollection<LineString, RoadProps> & {
 export type CityProps = { id: string; name: string };
 export type CitiesData = FeatureCollection<Point, CityProps>;
 
+/** One alert activation from data/alerts.json; it can cover several roads. */
+export type AlertEvent = { id: string; intent: string; at: string; roads: string[] };
+export type AlertsData = {
+  /** Names of every road ever seen, including roads no longer in the feed. */
+  roads: Record<string, { from: string; to: string }>;
+  /** Oldest first. */
+  events: AlertEvent[];
+};
+
 /** How often the GeoJSON in this repo is re-checked. */
 export const POLL_MS = 60_000;
 
@@ -33,9 +42,10 @@ export const POLL_MS = 60_000;
  */
 export const DATA_URL: string = import.meta.env.VITE_DATA_URL || `${import.meta.env.BASE_URL}data/`;
 
-async function fetchText(name: string): Promise<string> {
+async function fetchText(name: string, optional = false): Promise<string> {
   // Unique query + no-store bypasses the browser cache.
   const res = await fetch(`${DATA_URL}${name}?t=${Date.now()}`, { cache: 'no-store' });
+  if (optional && res.status === 404) return '';
   if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
   return res.text();
 }
@@ -43,16 +53,21 @@ async function fetchText(name: string): Promise<string> {
 export function useRoadData() {
   const [roads, setRoads] = useState<RoadsData | null>(null);
   const [cities, setCities] = useState<CitiesData | null>(null);
+  const [alerts, setAlerts] = useState<AlertsData | null>(null);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const [changedAt, setChangedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const last = useRef({ roads: '', cities: '' });
+  const last = useRef({ roads: '', cities: '', alerts: '' });
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [r, c] = await Promise.all([fetchText('roads.geojson'), fetchText('cities.geojson')]);
+      const [r, c, a] = await Promise.all([
+        fetchText('roads.geojson'),
+        fetchText('cities.geojson'),
+        fetchText('alerts.json', true), // missing until the data repo has its first alert log
+      ]);
       // Only hand new objects to the map when the file content actually changed.
       if (r !== last.current.roads) {
         last.current.roads = r;
@@ -62,6 +77,10 @@ export function useRoadData() {
       if (c !== last.current.cities) {
         last.current.cities = c;
         setCities(JSON.parse(c));
+      }
+      if (a !== last.current.alerts) {
+        last.current.alerts = a;
+        setAlerts(a ? JSON.parse(a) : null);
       }
       setError(null);
     } catch (e) {
@@ -84,5 +103,5 @@ export function useRoadData() {
     };
   }, [refresh]);
 
-  return { roads, cities, checkedAt, changedAt, error, loading, refresh };
+  return { roads, cities, alerts, checkedAt, changedAt, error, loading, refresh };
 }

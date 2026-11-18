@@ -5,7 +5,7 @@ A map of road segments in Crimea, Kherson, Zaporizhzhia, Donetsk and Luhansk, co
 The data isn't stored in this repo. The page fetches it at runtime from the [road-alerts-data](../road-alerts-data) repo, which a Raspberry Pi updates whenever the alert feed changes. New data therefore needs no rebuild or redeploy of this site.
 
 ```
-road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson
+road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/alerts.json
             ▲                              │ raw.githubusercontent.com
    Pi pushes on change                     ▼
                                 road-alerts page polls every 60 s
@@ -13,16 +13,24 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson
 
 ## Features
 
-- **Road segments** in the data's colour for each status: the `stroke` property. Segments with an alert status are drawn thicker than `neutral` ones.
-- **Segment details:** hover a road, or click it to keep the details open, to see from → to, status, last update, length, groups and the active alert, if there is one.
+- **Road segments** coloured by status. The colours are set in `STATUS_COLORS` in [src/colors.ts](src/colors.ts). Statuses not listed there use the `stroke` colour from the data. Segments with an alert status are drawn thicker than `neutral` ones.
+- **Segment details:** hover a road to see from → to, status, last update, length, groups and the active alert, if there is one.
+- **Alert history** in a card below the status panel, built from `alerts.json`:
+  - **Log:** every activation, newest first and grouped by day. Each entry shows the time, the type (`Threat` or `All clear`) and the roads it covers. A threat shows how long it took until the road was cleared, "repeated before clear" if a new threat came first, or "active now". Click a road name to open that road.
+  - **By hour:** alert count, number of roads affected, a chart of alerts per hour of the day, and a ranking of roads by alert count. A threat that covers several roads counts once in the chart.
+  - **One road:** click a road on the map or in a list. It is highlighted on the map, and the card shows its alert count, median time until clear, last alert, its own hour chart and its full history. **← All roads** goes back.
+  - **Period:** last 7 days, last 30 days or all time. It applies to all of the above.
+  - **Time zone:** road time (Moscow time, UTC+3, the local time on these roads) or the viewer's own. It also applies to the times in the hover popups.
+  - Only `threat` activations count as alerts in the counts and charts.
+  - Each chart has a hover tooltip and a **Table** view.
 - **Town markers:** black dots that show the town name on hover, or on tap on touch screens.
 - **Status panel** with:
   - a legend that counts segments per status;
   - when the feed was last updated (`source.updatedAt`);
   - the latest segment change (newest `updatedAt`);
   - when the page last checked for new data.
-- **Base maps:** OpenStreetMap, Esri Streets and Esri Imagery. The page remembers your choice for each browser.
-- **Auto-refresh.** The page fetches `roads.geojson` and `cities.geojson` every 60 seconds, when the tab becomes visible again, or when you press **Refresh**. Reloading the page also loads the latest data. The map only redraws when a file's content has changed.
+- **Base maps:** OpenStreetMap, Esri Streets and Esri Imagery. The page remembers the base map, period and time zone for each browser.
+- **Auto-refresh.** The page fetches `roads.geojson`, `cities.geojson` and `alerts.json` every 60 seconds, when the tab becomes visible again, or when you press **Refresh**. Reloading the page also loads the latest data. The map only redraws when a file's content has changed.
 
 ## Where the data comes from
 
@@ -31,7 +39,7 @@ The data location is set at build time with `VITE_DATA_URL`, the folder URL with
 | Context | Data URL |
 |---|---|
 | GitHub Pages build | `https://raw.githubusercontent.com/<owner>/road-alerts-data/main/data/`. The deploy workflow builds this from the repo owner. To use another location, set a repository variable `DATA_URL` under **Settings → Secrets and variables → Actions → Variables**. |
-| `npm run dev` / `npm run preview` | `/data/`. Vite serves this from the sibling folder `../road-alerts-data/data` (or `../road-alerts-backend/data`), so local changes show up immediately. |
+| `npm run dev` / `npm run preview` | `/data/`. Vite serves the `.geojson` and `.json` files from the sibling folder `../road-alerts-data/data` (or `../road-alerts-backend/data`), so local changes show up immediately. |
 | Anything else | Set `VITE_DATA_URL` in the environment or in a `.env.local` file. |
 
 `raw.githubusercontent.com` allows cross-site requests and caches files for up to 5 minutes. Each request adds a unique query parameter to get past that cache, but in the worst case new data appears a few minutes late.
@@ -46,6 +54,9 @@ npm run preview    # serve dist/ locally
 ```
 
 - The poll interval is `POLL_MS` in [src/data.ts](src/data.ts).
+- Status colours are `STATUS_COLORS` in [src/colors.ts](src/colors.ts).
+- The road time zone (`ROAD_TZ`), periods and the history calculations are in [src/history.ts](src/history.ts). The history card is [src/AlertHistory.tsx](src/AlertHistory.tsx), and the chart is [src/HourChart.tsx](src/HourChart.tsx).
+- If `alerts.json` is missing (404), the page still works and the card says there is no log yet.
 - The base maps are `BASEMAPS` in [src/RoadMap.tsx](src/RoadMap.tsx).
 - The local data folders are set in [vite.config.ts](vite.config.ts).
 

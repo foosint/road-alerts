@@ -1,16 +1,28 @@
 import { useEffect, useMemo, useState } from 'react';
 import RoadMap, { BASEMAPS } from './RoadMap';
 import { POLL_MS, useRoadData } from './data';
+import { statusColor } from './colors';
+import AlertHistory from './AlertHistory';
+import { PERIODS, TIME_MODES, tzOf, type Period, type TimeMode } from './history';
 
-const BASEMAP_KEY = 'road-alerts.basemap';
-
-function readBasemap() {
+// Per-browser preferences.
+function readPref<T extends string>(key: string, allowed: readonly T[]): T {
   try {
-    const v = localStorage.getItem(BASEMAP_KEY);
-    if (v && BASEMAPS.some((b) => b.id === v)) return v;
+    const v = localStorage.getItem(key) as T | null;
+    if (v && allowed.includes(v)) return v;
   } catch { /* storage unavailable */ }
-  return BASEMAPS[0].id;
+  return allowed[0];
 }
+function writePref(key: string, v: string) {
+  try { localStorage.setItem(key, v); } catch { /* ignore */ }
+}
+function usePref<T extends string>(key: string, allowed: readonly T[]) {
+  const [v, setV] = useState<T>(() => readPref(key, allowed));
+  return [v, (x: T) => { setV(x); writePref(key, x); }] as const;
+}
+const BASEMAP_IDS = BASEMAPS.map((b) => b.id);
+const TIME_IDS = TIME_MODES.map((m) => m.id);
+const PERIOD_IDS: Period[] = ['all', ...PERIODS.map((x) => x.id).filter((x) => x !== 'all')];
 
 function ago(date: Date | string | null | undefined, now: number) {
   if (!date) return '—';
@@ -22,8 +34,11 @@ function ago(date: Date | string | null | undefined, now: number) {
 }
 
 export default function App() {
-  const { roads, cities, checkedAt, error, loading, refresh } = useRoadData();
-  const [basemap, setBasemap] = useState(readBasemap);
+  const { roads, cities, alerts, checkedAt, error, loading, refresh } = useRoadData();
+  const [basemap, chooseBasemap] = usePref('road-alerts.basemap', BASEMAP_IDS);
+  const [timeMode, setTimeMode] = usePref<TimeMode>('road-alerts.time', TIME_IDS);
+  const [period, setPeriod] = usePref<Period>('road-alerts.period', PERIOD_IDS);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const [open, setOpen] = useState(true);
 
@@ -32,17 +47,12 @@ export default function App() {
     return () => window.clearInterval(t);
   }, []);
 
-  const chooseBasemap = (id: string) => {
-    setBasemap(id);
-    try { localStorage.setItem(BASEMAP_KEY, id); } catch { /* ignore */ }
-  };
-
   // Legend: one row per status present in the data, with the colour the backend assigned.
   const legend = useMemo(() => {
     const m = new Map<string, { color: string; count: number }>();
     for (const f of roads?.features ?? []) {
       const { status, stroke } = f.properties;
-      const e = m.get(status) ?? { color: stroke, count: 0 };
+      const e = m.get(status) ?? { color: statusColor(status, stroke), count: 0 };
       e.count += 1;
       m.set(status, e);
     }
@@ -60,8 +70,16 @@ export default function App() {
 
   return (
     <div className="app">
-      <RoadMap roads={roads} cities={cities} basemap={basemap} />
+      <RoadMap
+        roads={roads}
+        cities={cities}
+        basemap={basemap}
+        selectedId={selectedId}
+        onSelect={(id) => { setSelectedId(id); setOpen(true); }}
+        timeZone={tzOf(timeMode)}
+      />
 
+      <div className="sidebar">
       <aside className={`panel ${open ? '' : 'collapsed'}`}>
         <header>
           <h1>Road Alerts</h1>
@@ -108,10 +126,26 @@ export default function App() {
               </select>
               <button onClick={refresh} disabled={loading}>{loading ? 'Checking…' : 'Refresh'}</button>
             </section>
-            <div className="muted small">Auto-refresh every {POLL_MS / 1000} s · hover or click a road for details</div>
+            <div className="muted small">Auto-refresh every {POLL_MS / 1000} s · hover a road for details, click it for its alert history</div>
           </>
         )}
       </aside>
+
+      {open && (
+        <aside className="panel history-panel">
+          <AlertHistory
+            alerts={alerts}
+            roads={roads}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            timeMode={timeMode}
+            setTimeMode={setTimeMode}
+            period={period}
+            setPeriod={setPeriod}
+          />
+        </aside>
+      )}
+      </div>
     </div>
   );
 }

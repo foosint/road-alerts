@@ -37,12 +37,27 @@ body {
   inset: 0;
 }
 
-.panel {
+/* Left column: status card on top, alert history below (scrolls) */
+.sidebar {
   position: absolute;
   top: 12px;
   left: 12px;
-  width: 260px;
-  max-width: calc(100vw - 80px);
+  bottom: 12px;
+  width: 320px;
+  max-width: calc(100vw - 72px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none; /* the empty part below the cards belongs to the map */
+}
+
+.sidebar > * {
+  pointer-events: auto;
+}
+
+.panel {
+  flex: none;
+  box-sizing: border-box;
   background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -55,8 +70,14 @@ body {
 }
 
 .panel.collapsed {
-  width: auto;
+  align-self: flex-start;
   padding-bottom: 10px;
+}
+
+.history-panel {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .panel header {
@@ -198,13 +219,6 @@ select option {
 }
 
 .popup-status {
-  display: inline-block;
-  padding: 1px 8px;
-  border-radius: 10px;
-  background: var(--c);
-  color: #fff;
-  font-size: 12px;
-  text-transform: capitalize;
   margin-bottom: 6px;
 }
 
@@ -230,9 +244,291 @@ select option {
   margin: 6px 0 0;
 }
 
+/* ---- alert history */
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.history h3 {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs button {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 4px 10px 6px;
+  color: var(--muted);
+}
+
+.tabs button[aria-selected='true'] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.history-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.history-controls select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.pill,
+.popup-status {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--c);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.road-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+button.link {
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-align: left;
+}
+
+button.link:hover {
+  text-decoration: underline;
+}
+
+button.back {
+  align-self: flex-start;
+  font-size: 12px;
+}
+
+.stats {
+  display: flex;
+  gap: 6px;
+}
+
+.stats div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.stats b {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.events .day {
+  position: sticky;
+  top: -10px;
+  background: var(--panel-bg);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 6px 0 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.event {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 6px;
+  padding: 5px 0;
+  font-size: 12px;
+}
+
+.event time {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  padding-top: 1px;
+}
+
+.event > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+}
+
+.event-roads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-basis: 100%;
+}
+
+.event-roads li {
+  padding: 1px 0;
+}
+
+button.more {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+/* ---- hour chart */
+.hour-chart {
+  position: relative;
+}
+
+.hour-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.hour-chart .grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.hour-chart .axis {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+.hour-chart .tick {
+  fill: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hour-chart .peak {
+  fill: var(--text);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.chart-tip {
+  position: absolute;
+  top: -6px;
+  transform: translate(-50%, -100%);
+  background: var(--text);
+  color: var(--panel-bg);
+  border-radius: 4px;
+  padding: 3px 7px;
+  font-size: 11px;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.chart-table summary {
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chart-table table {
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+}
+
+.chart-table th,
+.chart-table td {
+  text-align: left;
+  padding: 1px 12px 1px 0;
+}
+
+/* ---- alerts per road */
+.ranking {
+  display: flex;
+  flex-direction: column;
+}
+
+.rank-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 70px 24px;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 4px;
+  font-size: 12px;
+  text-align: left;
+}
+
+.rank-row:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.rank-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.rank-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: #e03131;
+}
+
+.rank-n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.popup-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
 @media (max-width: 480px) {
-  .panel {
+  .sidebar {
     top: 8px;
     left: 8px;
+    bottom: 8px;
   }
 }
