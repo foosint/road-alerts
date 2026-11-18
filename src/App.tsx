@@ -3,7 +3,7 @@ import RoadMap, { BASEMAPS } from './RoadMap';
 import { POLL_MS, useRoadData } from './data';
 import { STATUS_COLORS, statusColor } from './colors';
 import AlertHistory from './AlertHistory';
-import { PERIODS, TIME_MODES, tzOf, type Period, type TimeMode } from './history';
+import { PERIODS, TIME_MODES, tzFor, type Period, type TimeMode } from './history';
 
 // Per-browser preferences.
 function readPref<T extends string>(key: string, allowed: readonly T[]): T {
@@ -88,7 +88,7 @@ export default function App() {
           setSelectedId(id);
           if (id) setOpen(true);
         }}
-        timeZone={tzOf(timeMode)}
+        timeZoneFor={tzFor(timeMode)}
       />
 
       <div className="sidebar">

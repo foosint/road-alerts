@@ -7,7 +7,7 @@ import maplibregl, {
 } from 'maplibre-gl';
 import type { CitiesData, RoadProps, RoadsData } from './data';
 import { STATUS_COLOR_EXPR, statusColor } from './colors';
-import { fmtTime } from './history';
+import { fmtTime, type TzFor } from './history';
 
 export type Basemap = { id: string; label: string; tiles: string[]; attribution: string };
 
@@ -90,17 +90,17 @@ type Props = {
   selectedId: string | null;
   /** Called with a road id on a road click, and with null on a click elsewhere on the map. */
   onSelect: (id: string | null) => void;
-  /** IANA zone for times in popups; undefined = the viewer's own. */
-  timeZone: string | undefined;
+  /** Time zone for a road's times in popups (undefined = the viewer's own). */
+  timeZoneFor: TzFor;
 };
 
-export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, timeZone }: Props) {
+export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, timeZoneFor }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const loaded = useRef(false);
   const fitted = useRef(false);
-  const pending = useRef<Props>({ roads, cities, basemap, selectedId, onSelect, timeZone });
-  pending.current = { roads, cities, basemap, selectedId, onSelect, timeZone };
+  const pending = useRef<Props>({ roads, cities, basemap, selectedId, onSelect, timeZoneFor });
+  pending.current = { roads, cities, basemap, selectedId, onSelect, timeZoneFor };
 
   // Create the map once.
   useEffect(() => {
@@ -220,7 +220,7 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
         map.getCanvas().style.cursor = 'pointer';
         hoverPopup
           .setLngLat(e.lngLat)
-          .setHTML(popupHtml(p, pending.current.timeZone, p.id !== pending.current.selectedId))
+          .setHTML(popupHtml(p, pending.current.timeZoneFor(p.id), p.id !== pending.current.selectedId))
           .addTo(map);
       });
       map.on('mouseleave', 'roads-hit', () => {

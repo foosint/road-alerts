@@ -3,8 +3,8 @@ import type { AlertEvent, AlertsData, RoadsData } from './data';
 import { STATUS_COLORS, statusColor } from './colors';
 import HourChart from './HourChart';
 import {
-  PERIODS, TIME_MODES, byHour, fmtDay, fmtDuration, fmtTime, inPeriod, isThreat, outcomes, roadName, tzOf,
-  type Outcome, type Period, type TimeMode,
+  PERIODS, TIME_MODES, byHour, fmtDay, fmtDuration, fmtTime, inPeriod, isThreat, outcomes, roadName, tzFor, tzLabel as zoneLabel,
+  type Outcome, type TzFor, type Period, type TimeMode,
 } from './history';
 
 type Props = {
@@ -37,8 +37,7 @@ export default function AlertHistory(p: Props) {
   const { alerts, roads, selectedId, onSelect, timeMode, period } = p;
   const [tab, setTab] = useState<'log' | 'hours'>('log');
   const [limit, setLimit] = useState(PAGE);
-  const tz = tzOf(timeMode);
-  const tzLabel = timeMode === 'road' ? 'MSK' : 'your time';
+  const tz = tzFor(timeMode);
 
   const feature = (id: string) => roads?.features.find((f) => f.properties.id === id)?.properties;
   const busyNow = (id: string) => {
@@ -76,6 +75,8 @@ export default function AlertHistory(p: Props) {
       .flatMap((o) => (o?.kind === 'cleared' ? [o.ms] : []))
       .sort((a, b) => a - b);
     const median = cleared.length ? cleared[Math.floor(cleared.length / 2)] : null;
+    const label = zoneLabel(timeMode, [selectedId]);
+    const roadOnly: TzFor = () => tz(selectedId); // shared events: show them in this road's zone
     return (
       <div className="history">
         <button className="link back" onClick={() => onSelect(null)}>← All roads</button>
@@ -89,13 +90,13 @@ export default function AlertHistory(p: Props) {
         <div className="stats">
           <div><b>{threats.length}</b><span>alerts</span></div>
           <div><b>{median === null ? '—' : fmtDuration(median)}</b><span>median until clear</span></div>
-          <div><b>{threats.length ? fmtTime(threats[threats.length - 1].at, tz) : '—'}</b><span>last alert</span></div>
+          <div><b>{threats.length ? fmtTime(threats[threats.length - 1].at, tz(selectedId)) : '—'}</b><span>last alert</span></div>
         </div>
-        <h3>Alerts by hour of day <span className="muted">({tzLabel})</span></h3>
-        <HourChart counts={byHour(own, tz)} tzLabel={tzLabel} />
-        <h3>History</h3>
+        <h3>Alerts by hour of day <span className="muted">({label})</span></h3>
+        <HourChart counts={byHour(own, roadOnly)} tzLabel={label} />
+        <h3>History <span className="muted">({label})</span></h3>
         <EventList
-          events={own} tz={tz} limit={limit} setLimit={setLimit}
+          events={own} tz={roadOnly} limit={limit} setLimit={setLimit}
           render={(e) => <span className="muted">{outcomeText(results.get(`${e.id}|${selectedId}`), busyNow(selectedId))}</span>}
         />
       </div>
@@ -103,6 +104,7 @@ export default function AlertHistory(p: Props) {
   }
 
   // ---- all roads
+  const label = zoneLabel(timeMode, Object.keys(alerts.roads));
   return (
     <div className="history">
       <div className="tabs" role="tablist">
@@ -110,7 +112,11 @@ export default function AlertHistory(p: Props) {
         <button role="tab" aria-selected={tab === 'hours'} onClick={() => setTab('hours')}>By hour</button>
       </div>
       {controls}
-      {since && <div className="muted small">Recorded since {fmtDay(since, tz)}</div>}
+      {since && (
+        <div className="muted small">
+          Recorded since {fmtDay(since, tz(alerts.events[0].roads[0]))} · times in {label}
+        </div>
+      )}
       {tab === 'log' ? (
         <EventList
           events={events} tz={tz} limit={limit} setLimit={setLimit}
@@ -126,7 +132,7 @@ export default function AlertHistory(p: Props) {
           )}
         />
       ) : (
-        <Overview events={events} tz={tz} tzLabel={tzLabel} name={name} onSelect={onSelect} />
+        <Overview events={events} tz={tz} tzLabel={label} name={name} onSelect={onSelect} />
       )}
     </div>
   );
@@ -134,7 +140,8 @@ export default function AlertHistory(p: Props) {
 
 function EventList({ events, tz, limit, setLimit, render }: {
   events: AlertEvent[];
-  tz: string | undefined;
+  /** Each event is shown in the zone of its (first) road. */
+  tz: TzFor;
   limit: number;
   setLimit: (n: number) => void;
   render: (e: AlertEvent) => ReactNode;
@@ -145,13 +152,13 @@ function EventList({ events, tz, limit, setLimit, render }: {
   return (
     <div className="events">
       {shown.map((e) => {
-        const d = fmtDay(e.at, tz);
+        const d = fmtDay(e.at, tz(e.roads[0]));
         const head = d !== day ? (day = d) : null;
         return (
           <div key={e.id}>
             {head && <div className="day">{head}</div>}
             <div className="event">
-              <time dateTime={e.at} title={e.at}>{fmtTime(e.at, tz, false)}</time>
+              <time dateTime={e.at} title={e.at}>{fmtTime(e.at, tz(e.roads[0]), false)}</time>
               <div>
                 <IntentPill intent={e.intent} />
                 {render(e)}
@@ -171,7 +178,7 @@ function EventList({ events, tz, limit, setLimit, render }: {
 
 function Overview({ events, tz, tzLabel, name, onSelect }: {
   events: AlertEvent[];
-  tz: string | undefined;
+  tz: TzFor;
   tzLabel: string;
   name: (id: string) => string;
   onSelect: (id: string) => void;

@@ -1,13 +1,40 @@
 import type { AlertEvent, AlertsData } from './data';
 
-/** Times on the map are shown either in the time zone of the roads or in the viewer's own. */
+/**
+ * Times are shown either as the local clock time where the road is, or in the viewer's own zone.
+ *
+ * ROAD_TZ is the clock time in use on all roads in the feed (Crimea, Kherson, Zaporizhzhia,
+ * Donetsk and Luhansk regions): UTC+3 all year. A road that keeps a different time can be
+ * listed in ROAD_TZ_BY_ROAD with its IANA zone.
+ */
 export const ROAD_TZ = 'Europe/Moscow';
+const ROAD_TZ_BY_ROAD: Record<string, string> = {};
+
+/** The time zone to show a road's times in; undefined = the viewer's own. */
+export type TzFor = (roadId?: string) => string | undefined;
+export const roadTz: TzFor = (roadId) => (roadId && ROAD_TZ_BY_ROAD[roadId]) || ROAD_TZ;
+
 export type TimeMode = 'road' | 'local';
-export const tzOf = (mode: TimeMode) => (mode === 'road' ? ROAD_TZ : undefined);
+export const tzFor = (mode: TimeMode): TzFor => (mode === 'road' ? roadTz : () => undefined);
 export const TIME_MODES: { id: TimeMode; label: string }[] = [
-  { id: 'road', label: 'Road time (MSK)' },
+  { id: 'road', label: 'Local time on the road' },
   { id: 'local', label: 'My time' },
 ];
+
+/** "UTC+3" for a zone at the given moment (default now). */
+export function utcOffset(tz: string | undefined, at = new Date()): string {
+  const name = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
+    .formatToParts(at)
+    .find((x) => x.type === 'timeZoneName')?.value ?? '';
+  return name === 'GMT' ? 'UTC' : name.replace('GMT', 'UTC');
+}
+
+/** Label for times shown with tzFor(mode) for the given roads. */
+export function tzLabel(mode: TimeMode, roadIds: string[]): string {
+  if (mode === 'local') return `your time, ${utcOffset(undefined)}`;
+  const offsets = new Set(roadIds.map((r) => utcOffset(roadTz(r))));
+  return offsets.size === 1 ? `local time, ${[...offsets][0]}` : 'local time of each road';
+}
 
 export type Period = '7' | '30' | 'all';
 export const PERIODS: { id: Period; label: string }[] = [
@@ -62,10 +89,13 @@ function hourOf(iso: string, tz: string | undefined): number {
   return Number(f.format(new Date(iso))) % 24;
 }
 
-/** Threat activations per hour of day (0-23). Each activation counts once, however many roads it covers. */
-export function byHour(events: AlertEvent[], tz: string | undefined): number[] {
+/**
+ * Threat activations per hour of day (0-23), in the time zone of the event's road.
+ * Each activation counts once, however many roads it covers.
+ */
+export function byHour(events: AlertEvent[], tz: TzFor): number[] {
   const counts = new Array<number>(24).fill(0);
-  for (const e of events) if (isThreat(e)) counts[hourOf(e.at, tz)] += 1;
+  for (const e of events) if (isThreat(e)) counts[hourOf(e.at, tz(e.roads[0]))] += 1;
   return counts;
 }
 
