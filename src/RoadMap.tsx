@@ -9,28 +9,69 @@ import type { CitiesData, RoadProps, RoadsData } from './data';
 import { statusColor, statusColorExpr } from './colors';
 import { fmtTime, type TzFor } from './history';
 
-export type Basemap = { id: string; label: string; tiles: string[]; attribution: string };
+export type Basemap = {
+  id: string;
+  label: string;
+  /** Light or dark map; the select groups them. */
+  tone: 'light' | 'dark';
+  tiles: string[];
+  /** Optional label layer (town names) drawn on top of the tiles. */
+  labels?: string[];
+  maxzoom?: number;
+  /** Raster paint settings, e.g. to darken a light map. */
+  paint?: Record<string, number>;
+  attribution: string;
+};
 
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+const esri = (service: string) => [`${ESRI}${service}/MapServer/tile/{z}/{y}/{x}`];
+const OSM_TILES = ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'];
+const OSM_ATTR = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+/** Base maps; all of them show town names. The first one is the default. */
 export const BASEMAPS: Basemap[] = [
+  { id: 'osm', label: 'OpenStreetMap', tone: 'light', tiles: OSM_TILES, attribution: OSM_ATTR },
   {
-    id: 'osm',
-    label: 'OSM',
-    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  },
-  {
-    id: 'esri-streets',
-    label: 'Esri Streets',
-    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'],
+    id: 'esri-light',
+    label: 'Esri Light Gray',
+    tone: 'light',
+    tiles: esri('Canvas/World_Light_Gray_Base'),
+    labels: esri('Canvas/World_Light_Gray_Reference'),
+    maxzoom: 16,
     attribution: 'Tiles © Esri',
   },
+  { id: 'esri-streets', label: 'Esri Streets', tone: 'light', tiles: esri('World_Street_Map'), attribution: 'Tiles © Esri' },
+  { id: 'esri-topo', label: 'Esri Topographic', tone: 'light', tiles: esri('World_Topo_Map'), attribution: 'Tiles © Esri' },
   {
-    id: 'esri-imagery',
-    label: 'Esri Imagery',
-    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+    id: 'esri-imagery', // id kept so saved choices still work
+    label: 'Esri Imagery with labels',
+    tone: 'light',
+    tiles: esri('World_Imagery'),
+    labels: esri('Reference/World_Boundaries_and_Places'),
     attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics',
   },
+  {
+    id: 'osm-dark',
+    label: 'OpenStreetMap dark',
+    tone: 'dark',
+    tiles: OSM_TILES,
+    // Invert the brightness (white -> dark grey, dark text -> light), then turn the hues back.
+    paint: { 'raster-brightness-min': 0.9, 'raster-brightness-max': 0.08, 'raster-hue-rotate': 180, 'raster-saturation': -0.4 },
+    attribution: OSM_ATTR,
+  },
+  {
+    id: 'esri-dark',
+    label: 'Esri Dark Gray',
+    tone: 'dark',
+    tiles: esri('Canvas/World_Dark_Gray_Base'),
+    labels: esri('Canvas/World_Dark_Gray_Reference'),
+    maxzoom: 16,
+    attribution: 'Tiles © Esri',
+  },
 ];
+
+/** Layer ids of a base map: its tiles and, if it has one, its label layer. */
+const baseLayers = (b: Basemap) => (b.labels ? [`base-${b.id}`, `base-${b.id}-labels`] : [`base-${b.id}`]);
 
 const EMPTY = { type: 'FeatureCollection' as const, features: [] };
 /** Keep fitted roads clear of the left sidebar on wide screens. */
@@ -42,17 +83,23 @@ const STATUS: ExpressionSpecification = ['coalesce', ['feature-state', 'pb'], ['
 const IS_NEUTRAL: ExpressionSpecification = ['==', STATUS, 'neutral'];
 
 function baseStyle(active: string): StyleSpecification {
+  const raster = (tiles: string[], b: Basemap, attribution?: string) => ({
+    type: 'raster', tiles, tileSize: 256, maxzoom: b.maxzoom ?? 19, ...(attribution ? { attribution } : {}),
+  });
   return {
     version: 8,
-    sources: Object.fromEntries(
-      BASEMAPS.map((b) => [b.id, { type: 'raster', tiles: b.tiles, tileSize: 256, maxzoom: 19, attribution: b.attribution }]),
-    ),
-    layers: BASEMAPS.map((b) => ({
-      id: `base-${b.id}`,
+    sources: Object.fromEntries(BASEMAPS.flatMap((b) => [
+      [b.id, raster(b.tiles, b, b.attribution)],
+      ...(b.labels ? [[`${b.id}-labels`, raster(b.labels, b)]] : []),
+    ])),
+    // Base maps sit below everything else; the road and town layers are added on top.
+    layers: BASEMAPS.flatMap((b) => baseLayers(b).map((id, i) => ({
+      id,
       type: 'raster',
-      source: b.id,
+      source: i ? `${b.id}-labels` : b.id,
       layout: { visibility: b.id === active ? 'visible' : 'none' },
-    })),
+      ...(b.paint && !i ? { paint: b.paint } : {}),
+    }))),
   } as StyleSpecification;
 }
 
@@ -258,7 +305,9 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
     if (!loaded.current) return;
     const { roads: r, cities: c, basemap: b, selectedId: sel, playbackStatus: pb } = pending.current;
     map.setFilter('roads-selected', ['==', ['get', 'id'], sel ?? '']);
-    for (const bm of BASEMAPS) map.setLayoutProperty(`base-${bm.id}`, 'visibility', bm.id === b ? 'visible' : 'none');
+    for (const bm of BASEMAPS) {
+      for (const id of baseLayers(bm)) map.setLayoutProperty(id, 'visibility', bm.id === b ? 'visible' : 'none');
+    }
     if (r) (map.getSource('roads') as GeoJSONSource).setData(r);
     if (pb) for (const [id, status] of Object.entries(pb)) map.setFeatureState({ source: 'roads', id }, { pb: status });
     else map.removeFeatureState({ source: 'roads' });

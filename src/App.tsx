@@ -179,8 +179,12 @@ export default function App() {
 
             <section className="controls">
               <select value={basemap} onChange={(e) => chooseBasemap(e.target.value)} aria-label="Base map">
-                {BASEMAPS.map((b) => (
-                  <option key={b.id} value={b.id}>{b.label}</option>
+                {(['light', 'dark'] as const).map((tone) => (
+                  <optgroup key={tone} label={tone === 'light' ? 'Light maps' : 'Dark maps'}>
+                    {BASEMAPS.filter((b) => b.tone === tone).map((b) => (
+                      <option key={b.id} value={b.id}>{b.label}</option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
               <button onClick={refresh} disabled={loading}>{loading ? 'Checking…' : 'Refresh'}</button>

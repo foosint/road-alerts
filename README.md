@@ -34,7 +34,11 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - when the feed was last updated (`source.updatedAt`);
   - the latest segment change (newest `updatedAt`);
   - when the page last checked for new data.
-- **Base maps:** OpenStreetMap, Esri Streets and Esri Imagery.
+- **Base maps:** all of them show town names.
+  - Light: OpenStreetMap (default), Esri Light Gray, Esri Streets, Esri Topographic, and Esri Imagery with a label layer on top.
+  - Dark, for use with the dark theme: Esri Dark Gray, and "OpenStreetMap dark", the normal OSM tiles with their brightness inverted by MapLibre.
+  - Esri Light Gray and Dark Gray only go to zoom level 16.
+  - All of these work without an API key. CARTO base maps were left out because they now require one.
 - **Playback:** press **Playback** in the panel to replay the alerts of today or of the last 1, 3, 7 or 30 days.
   - A bar over the map has play/pause, a time slider, the range and the speed (5 min to 12 h of alert time per second).
   - The map colours each road by its status at the shown time, and the legend counts those statuses. The bar also shows how many alerts were active.
