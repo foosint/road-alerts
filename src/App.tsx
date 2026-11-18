@@ -154,6 +154,7 @@ export default function App() {
             setTimeMode={setTimeMode}
             period={period}
             setPeriod={setPeriod}
+            now={now}
           />
         </aside>
       )}

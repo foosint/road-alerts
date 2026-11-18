@@ -64,37 +64,83 @@ export const PERIODS: { id: Period; label: string }[] = [
 
 export const isThreat = (e: AlertEvent) => e.intent === 'threat';
 
-export function inPeriod(events: AlertEvent[], period: Period, now = Date.now()): AlertEvent[] {
-  if (period === 'all') return events;
-  const from = now - Number(period) * 86_400_000;
-  return events.filter((e) => Date.parse(e.at) >= from);
-}
-
 /**
- * What happened after each threat on each road: cleared (with duration), replaced by a
- * newer threat, or still open. Key: `${eventId}|${roadId}`.
+ * One alert on one road: from its first threat until it ended.
+ *
+ * - clear:   ended by an "all clear" activation
+ * - ended:   the road went back to neutral without an all clear (the usual case)
+ * - ongoing: the road is still busy
+ * - unknown: no end was recorded (only possible before `statusSince`, when status
+ *            changes were not logged yet, or if the road left the feed)
+ *
+ * A new threat while the alert is still running (no clear and no neutral status in
+ * between) renews it instead of starting a new one.
  */
-export type Outcome = { kind: 'cleared'; ms: number } | { kind: 'superseded' } | { kind: 'open' };
+export type Episode = {
+  key: string;
+  road: string;
+  start: string;
+  end: string | null;
+  how: 'clear' | 'ended' | 'ongoing' | 'unknown';
+  renewals: number;
+};
 
-export function outcomes(alerts: AlertsData | null): Map<string, Outcome> {
-  const res = new Map<string, Outcome>();
-  const open = new Map<string, AlertEvent>(); // road -> last threat without an answer yet
-  for (const e of alerts?.events ?? []) {
-    for (const road of e.roads) {
-      const prev = open.get(road);
-      if (prev) {
-        res.set(`${prev.id}|${road}`, e.intent === 'clear'
-          ? { kind: 'cleared', ms: Date.parse(e.at) - Date.parse(prev.at) }
-          : { kind: 'superseded' });
-        open.delete(road);
-      }
-      if (isThreat(e)) {
-        open.set(road, e);
-        res.set(`${e.id}|${road}`, { kind: 'open' });
+export function episodes(alerts: AlertsData | null, statusNow: (road: string) => string | undefined): Episode[] {
+  if (!alerts) return [];
+  const since = alerts.statusSince ? Date.parse(alerts.statusSince) : Infinity;
+  type Item = { at: string; kind: 'threat' | 'clear' | 'neutral'; id: string };
+  const perRoad = new Map<string, Item[]>();
+  const add = (road: string, item: Item) => {
+    const list = perRoad.get(road);
+    if (list) list.push(item);
+    else perRoad.set(road, [item]);
+  };
+  for (const e of alerts.events) {
+    if (e.intent !== 'threat' && e.intent !== 'clear') continue;
+    for (const road of e.roads) add(road, { at: e.at, kind: e.intent, id: e.id });
+  }
+  for (const c of alerts.changes ?? []) {
+    if (c.status === 'neutral') add(c.road, { at: c.at, kind: 'neutral', id: `s${c.at}` });
+  }
+
+  const out: Episode[] = [];
+  for (const [road, items] of perRoad) {
+    items.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    let open: Episode | null = null;
+    for (const it of items) {
+      if (it.kind === 'threat') {
+        if (open && Date.parse(open.start) >= since) {
+          open.renewals += 1; // status was logged and the road never went neutral: same alert
+          continue;
+        }
+        if (open) out.push(open); // before status logging: end unknown
+        open = { key: `${it.id}|${road}`, road, start: it.at, end: null, how: 'unknown', renewals: 0 };
+      } else if (open) {
+        open.end = it.at;
+        open.how = it.kind === 'clear' ? 'clear' : 'ended';
+        out.push(open);
+        open = null;
       }
     }
+    if (open) {
+      const s = statusNow(road);
+      if (s && s !== 'neutral') open.how = 'ongoing';
+      out.push(open);
+    }
   }
-  return res;
+  return out.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+}
+
+/** How long an alert lasted (or has lasted so far); null if its end is unknown. */
+export function episodeMs(e: Episode, now = Date.now()): number | null {
+  if (e.how === 'unknown') return null;
+  return (e.end ? Date.parse(e.end) : now) - Date.parse(e.start);
+}
+
+export function inPeriod(list: Episode[], period: Period, now = Date.now()): Episode[] {
+  if (period === 'all') return list;
+  const from = now - Number(period) * 86_400_000;
+  return list.filter((e) => Date.parse(e.start) >= from || e.how === 'ongoing'); // began in the period, or still running
 }
 
 const hourFormatters = new Map<string, Intl.DateTimeFormat>();
@@ -108,13 +154,10 @@ function hourOf(iso: string, tz: string | undefined): number {
   return Number(f.format(new Date(iso))) % 24;
 }
 
-/**
- * Threat activations per hour of day (0-23), in the time zone of the event's road.
- * Each activation counts once, however many roads it covers.
- */
-export function byHour(events: AlertEvent[], tz: TzFor): number[] {
+/** Alerts per hour of day (0-23) in which they began, in the time zone of their road. */
+export function byHour(list: Episode[], tz: TzFor): number[] {
   const counts = new Array<number>(24).fill(0);
-  for (const e of events) if (isThreat(e)) counts[hourOf(e.at, tz(e.roads[0]))] += 1;
+  for (const e of list) counts[hourOf(e.start, tz(e.road))] += 1;
   return counts;
 }
 

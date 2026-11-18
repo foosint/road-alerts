@@ -25,11 +25,16 @@ export type CitiesData = FeatureCollection<Point, CityProps>;
 
 /** One alert activation from data/alerts.json; it can cover several roads. */
 export type AlertEvent = { id: string; intent: string; at: string; roads: string[] };
+/** A road's status changed (e.g. busy -> neutral) at `at`. */
+export type StatusChange = { road: string; status: string; from: string; at: string };
 export type AlertsData = {
   /** Names of every road ever seen, including roads no longer in the feed. */
   roads: Record<string, { from: string; to: string }>;
-  /** Oldest first. */
+  /** Activations, oldest first. */
   events: AlertEvent[];
+  /** Status changes, oldest first; recorded from `statusSince` on (older logs have neither). */
+  changes?: StatusChange[];
+  statusSince?: string;
 };
 
 /**

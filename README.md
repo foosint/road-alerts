@@ -16,12 +16,17 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
 - **Road segments** coloured by status. The colours are set in `STATUS_COLORS` in [src/colors.ts](src/colors.ts). Statuses not listed there use the `stroke` colour from the data. Segments with an alert status are drawn thicker than `neutral` ones.
 - **Segment details:** hover a road to see from → to, status, last update, length, groups and the active alert, if there is one.
 - **Alert history** in a card below the status panel, built from `alerts.json`:
-  - **Log:** every activation, newest first and grouped by day. Each entry shows the time, the type (`Threat` or `All clear`) and the roads it covers. A threat shows how long it took until the road was cleared, "repeated before clear" if a new threat came first, or "active now". Click a road name to open that road.
-  - **By hour:** alert count, number of roads affected, a chart of alerts per hour of the day, and a ranking of roads by alert count. A threat that covers several roads counts once in the chart.
-  - **One road:** click a road on the map or in a list. It is highlighted on the map, and the card shows its alert count, median time until clear, last alert, its own hour chart and its full history. **← All roads**, a click elsewhere on the map, or the Escape key goes back.
-  - **Period:** last day (24 hours), last 3 days, last 7 days, last 30 days or all time (default). It applies to all of the above.
+  - **Log:** one entry per alert per road, newest first and grouped by the day it began. An activation that covers three roads gives three entries. Each entry shows:
+    - the start time and the road (click it to open that road);
+    - how long the alert lasted, e.g. `Threat (active for 56 min)`. This counts up while the alert is still running.
+    - how it ended: `until 18:57` when the road went back to neutral, `until 18:57 · all clear` when an all clear came, or `ongoing`.
+  - **When an alert ends:** the road turns neutral again, or an all clear comes, whichever happens first. A new threat on a road that is still busy extends the running alert ("renewed 1×") instead of starting a new one.
+  - **Older alerts:** the alert log records alert ends from `statusSince` on. Older alerts without an all clear show "end not recorded" and "(duration unknown)".
+  - **By hour:** number of alerts, roads affected and alerts active now, a chart of when alerts began by hour of the day, and a ranking of roads by number of alerts.
+  - **One road:** click a road on the map or in a list. It is highlighted on the map, and the card shows its number of alerts, median duration, last alert, its own hour chart and its full history. **← All roads**, a click elsewhere on the map, or the Escape key goes back.
+  - **Period:** last day (24 hours), last 3 days, last 7 days, last 30 days or all time (default). It applies to all of the above and selects alerts by the time they began. Running alerts are always included.
   - **Time zone:** *Kyiv time* (default) uses Ukraine's official time (UTC+2, UTC+3 in summer). *My time* uses the viewer's own zone. *Local Russian time (MSK)* shows the clock time in use where the road is: Moscow time, UTC+3 all year. In winter it is an hour ahead of Kyiv time; in summer they match. The labels name the offset, e.g. "Kyiv time, UTC+2" or "MSK, UTC+3". The setting also applies to the times in the hover popups. All roads in the feed currently keep UTC+3 all year. A road with a different zone can be added to `ROAD_TZ_BY_ROAD` in [src/history.ts](src/history.ts).
-  - Only `threat` activations count as alerts in the counts and charts.
+  - The counts and charts are per road: an activation that covers two roads counts as two alerts.
   - Each chart has a hover tooltip and a **Table** view.
 - **Town markers:** black dots that show the town name on hover, or on tap on touch screens.
 - **Status panel** with:

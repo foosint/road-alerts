@@ -385,6 +385,20 @@ button.back {
   gap: 4px 6px;
 }
 
+.event .duration {
+  font-variant-numeric: tabular-nums;
+}
+
+.event .road,
+.event .end {
+  flex-basis: 100%;
+}
+
+.event.ongoing .duration {
+  font-weight: 600;
+  color: #e03131;
+}
+
 .event-roads {
   list-style: none;
   margin: 0;
