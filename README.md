@@ -18,7 +18,7 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
 - **Alert history** in a card below the status panel, built from `alerts.json`:
   - **Log:** one entry per alert per road, newest first and grouped by the day it began. An activation that covers three roads gives three entries. Each entry shows:
     - the start time and the road (click it to open that road);
-    - how long the alert lasted, e.g. `Threat (active for 56 min)`. This counts up while the alert is still running.
+    - how long the alert lasted, in green, e.g. `Threat (was active for 56 min)`. While the alert is still running, it shows `(active for 12 min)` in red and counts up.
     - how it ended: `until 18:57` when the road went back to neutral, `until 18:57 · all clear` when an all clear came, or `ongoing`.
   - **When an alert ends:** the road turns neutral again, or an all clear comes, whichever happens first. A new threat on a road that is still busy extends the running alert ("renewed 1×") instead of starting a new one.
   - **Older alerts:** the alert log records alert ends from `statusSince` on. Older alerts without an all clear show "end not recorded" and "(duration unknown)".

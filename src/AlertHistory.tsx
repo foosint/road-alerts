@@ -144,12 +144,16 @@ function AlertList({ list, tz, now, limit, setLimit, statusSince, name, onSelect
         return (
           <div key={e.key}>
             {head && <div className="day">{head}</div>}
-            <div className={`event ${e.how === 'ongoing' ? 'ongoing' : ''}`}>
+            <div className={`event ${e.how === 'ongoing' ? 'ongoing' : e.end ? 'ended' : ''}`}>
               <time dateTime={e.start} title={e.start}>{fmtTime(e.start, zone, false)}</time>
               <div>
                 <span className="pill" style={{ ['--c' as string]: STATUS_COLORS.busy }}>Threat</span>
                 <span className="duration">
-                  {ms === null ? '(duration unknown)' : `(active for ${fmtDuration(ms)})`}
+                  {ms === null
+                    ? '(duration unknown)'
+                    : e.how === 'ongoing'
+                      ? `(active for ${fmtDuration(ms)})`
+                      : `(was active for ${fmtDuration(ms)})`}
                 </span>
                 {name && onSelect && (
                   <button className="link road" onClick={() => onSelect(e.road)}>{name(e.road)}</button>
