@@ -29,6 +29,8 @@ export type BarChartProps = {
   fmt?: (v: number) => string;
   /** Format a value in the tooltip (default: fmt), e.g. "3 alerts". */
   tipValue?: (v: number) => string;
+  /** Format the value label above each bar (default: fmt); keep it short. */
+  barFmt?: (v: number) => string;
   /** Added to the tooltip value, e.g. a share of the total. */
   tipExtra?: (i: number) => string;
   ariaLabel: string;
@@ -39,7 +41,7 @@ export type BarChartProps = {
 
 /** Single-series bar chart with a hover/tap tooltip, a peak label and a table view. */
 export default function BarChart({
-  values, labels, ticks, fmt = String, tipValue, tipExtra, ariaLabel, tableHead, color = STATUS_COLORS.busy,
+  values, labels, ticks, fmt = String, barFmt = fmt, tipValue, tipExtra, ariaLabel, tableHead, color = STATUS_COLORS.busy,
   emptyText = 'No alerts in this period.',
 }: BarChartProps) {
   const [hover, setHover] = useState<number | null>(null);
@@ -54,6 +56,9 @@ export default function BarChart({
   const colW = plotW / values.length;
   const gap = colW >= 5 ? 2 : 0; // thin bars: no gap
   const y = (v: number) => PAD.top + plotH - (v / max) * plotH;
+  // A value above every bar when all of them fit their column, else only above the peak.
+  const barText = values.map((v) => (v ? barFmt(v) : ''));
+  const allFit = barText.every((t) => t.length * 5 <= colW + 1);
 
   return (
     <div className="hour-chart">
@@ -74,8 +79,10 @@ export default function BarChart({
               {!!v && (
                 <path d={barPath(x, t, w, y(0) - t)} fill={color} opacity={hover === null || hover === i ? 1 : 0.45} />
               )}
-              {i === peak && colW >= 8 && (
-                <text className="peak" x={x + w / 2} y={t - 3} textAnchor="middle">{fmt(top)}</text>
+              {(allFit ? !!v : i === peak && colW >= 8) && (
+                <text className={i === peak ? 'peak' : 'value'} x={x + w / 2} y={t - 3} textAnchor="middle">
+                  {allFit ? barText[i] : fmt(top)}
+                </text>
               )}
               {/* hit target: the whole column, bigger than the bar */}
               <rect

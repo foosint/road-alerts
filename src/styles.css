@@ -62,7 +62,7 @@ body {
   top: 12px;
   left: 12px;
   bottom: 12px;
-  width: 320px;
+  width: 360px;
   max-width: calc(100vw - 72px);
   display: flex;
   flex-direction: column;
@@ -598,10 +598,17 @@ button[aria-pressed='true'] {
   font-variant-numeric: tabular-nums;
 }
 
-.hour-chart .peak {
+.hour-chart .peak,
+.hour-chart .value {
   fill: var(--text);
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.hour-chart .value {
+  fill: var(--muted);
+  font-weight: 500;
 }
 
 .chart-tip {

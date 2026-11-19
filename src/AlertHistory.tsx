@@ -9,6 +9,12 @@ import {
   tzLabel as zoneLabel, type Bucket, type Episode, type Grain, type Period, type TimeMode, type TzFor,
 } from './history';
 
+/** Compact duration for bar labels: "45m", "1h11". */
+const shortMin = (m: number) => {
+  const r = Math.round(m);
+  return r < 60 ? `${r}m` : `${Math.floor(r / 60)}h${String(r % 60).padStart(2, '0')}`;
+};
+
 type Props = {
   alerts: AlertsData | null;
   roads: RoadsData | null;
@@ -357,6 +363,7 @@ function DurationTab({ list, bs, grain, control, name, onSelect }: TabProps & {
         labels={bs.map((b) => b.label)}
         ticks={spreadTicks(bs.map((b) => b.short))}
         fmt={fmtMin}
+        barFmt={shortMin}
         tipExtra={(i) => plural(mins(bs[i].items).length, 'alert')}
         ariaLabel={`Median alert duration per ${unit}`}
         tableHead={[unit[0].toUpperCase() + unit.slice(1), 'Median duration']}

@@ -34,7 +34,7 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - **Period:** today (since midnight in the selected time zone), last day (24 hours), last 3 days, last 7 days, last 30 days or all time (default). It applies to all of the above and selects alerts by the time they began. Running alerts are always included.
   - **Time zone:** *Kyiv time* (default) uses Ukraine's official time (UTC+2, UTC+3 in summer). *My time* uses the viewer's own zone. *Local Russian time (MSK)* shows the clock time in use where the road is: Moscow time, UTC+3 all year. In winter it is an hour ahead of Kyiv time; in summer they match. The labels name the offset, e.g. "Kyiv time, UTC+2" or "MSK, UTC+3". The setting also applies to the times in the hover popups. All roads in the feed currently keep UTC+3 all year. A road with a different zone can be added to `ROAD_TZ_BY_ROAD` in [src/history.ts](src/history.ts).
   - The counts and charts are per road: an activation that covers two roads counts as two alerts. Days, weeks and months are calendar days in the selected time zone.
-  - Each chart has a hover tooltip and a **Table** view.
+  - Each chart shows its value above every bar (above only the highest bar when there are too many bars for the labels to fit, e.g. 30 days), and has a hover tooltip and a **Table** view.
 - **Town markers:** black dots that show the town name on hover, or on tap on touch screens.
 - **Status panel** with:
   - a legend with every status in `STATUS_COLORS`, even when no segment has it, and the number of segments per status;

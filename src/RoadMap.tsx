@@ -76,7 +76,7 @@ const baseLayers = (b: Basemap) => (b.labels ? [`base-${b.id}`, `base-${b.id}-la
 const EMPTY = { type: 'FeatureCollection' as const, features: [] };
 /** Keep fitted roads clear of the left sidebar on wide screens. */
 const fitPadding = (p: number) =>
-  window.innerWidth > 700 ? { top: p, bottom: p, right: p, left: 344 + p } : p;
+  window.innerWidth > 700 ? { top: p, bottom: p, right: p, left: 384 + p } : p;
 
 /** A road's status: the playback status (feature-state "pb") while playing back, else the live one. */
 const STATUS: ExpressionSpecification = ['coalesce', ['feature-state', 'pb'], ['get', 'status']];
