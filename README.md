@@ -23,10 +23,17 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - **When an alert ends:** when the road is neutral again. An all clear counts the same as the road returning to neutral, whichever comes first. A new threat on a road that is still busy extends the running alert ("renewed 1×") instead of starting a new one.
   - **Older alerts:** the alert log records alert ends from `statusSince` on. Older alerts without an all clear show "end not recorded" and "(duration unknown)".
   - **By hour:** number of alerts, roads affected and alerts active now, a chart of when alerts began by hour of the day, and a ranking of roads by number of alerts.
-  - **One road:** click a road on the map or in a list. It is highlighted on the map, and the card shows its number of alerts, median duration, last alert, its own hour chart and its full history. **← All roads**, a click elsewhere on the map, or the Escape key goes back.
+  - **Trend:** number of alerts per day, week or month (weeks run Monday to Sunday).
+    - Tiles show the current day, week or month so far, the previous one, the average, and the change between the last two (▲ more, ▼ fewer).
+    - A per-road list shows each road's count in the previous and current day, week or month, with the change.
+  - **Duration:** how long finished alerts lasted. Running alerts and those with an unknown end are left out.
+    - Tiles show the median, average and longest duration.
+    - Charts show the median duration per day, week or month (with the change against the previous one) and how many alerts fell into each duration class (<15 min … 8 h+).
+    - A ranking lists the median duration per road.
+  - **One road:** click a road on the map or in a list. It is highlighted on the map, and the card shows its number of alerts, median duration and last alert. The same four tabs (Log, By hour, Trend, Duration) then show only that road. **← All roads**, a click elsewhere on the map, or the Escape key goes back.
   - **Period:** today (since midnight in the selected time zone), last day (24 hours), last 3 days, last 7 days, last 30 days or all time (default). It applies to all of the above and selects alerts by the time they began. Running alerts are always included.
   - **Time zone:** *Kyiv time* (default) uses Ukraine's official time (UTC+2, UTC+3 in summer). *My time* uses the viewer's own zone. *Local Russian time (MSK)* shows the clock time in use where the road is: Moscow time, UTC+3 all year. In winter it is an hour ahead of Kyiv time; in summer they match. The labels name the offset, e.g. "Kyiv time, UTC+2" or "MSK, UTC+3". The setting also applies to the times in the hover popups. All roads in the feed currently keep UTC+3 all year. A road with a different zone can be added to `ROAD_TZ_BY_ROAD` in [src/history.ts](src/history.ts).
-  - The counts and charts are per road: an activation that covers two roads counts as two alerts.
+  - The counts and charts are per road: an activation that covers two roads counts as two alerts. Days, weeks and months are calendar days in the selected time zone.
   - Each chart has a hover tooltip and a **Table** view.
 - **Town markers:** black dots that show the town name on hover, or on tap on touch screens.
 - **Status panel** with:

@@ -237,3 +237,118 @@ export function busyAt(list: Episode[], t: number): Set<string> {
   }
   return busy;
 }
+
+// ---------------------------------------------------------------- trends
+
+export type Grain = 'day' | 'week' | 'month';
+export const GRAINS: { id: Grain; label: string; current: string; previous: string }[] = [
+  { id: 'day', label: 'Daily', current: 'Today', previous: 'Yesterday' },
+  { id: 'week', label: 'Weekly', current: 'This week', previous: 'Last week' },
+  { id: 'month', label: 'Monthly', current: 'This month', previous: 'Last month' },
+];
+
+/** A day, week (Monday to Sunday) or month, with the alerts that began in it. */
+export type Bucket = { key: string; label: string; short: string; items: Episode[] };
+
+const ymd = (key: string) => key.split('-').map(Number);
+const utcDay = (key: string) => {
+  const [y, m, d] = ymd(key);
+  return Date.UTC(y, m - 1, d);
+};
+const keyOfUtc = (t: number) => new Date(t).toISOString().slice(0, 10);
+const fmtUtc = (t: number, o: Intl.DateTimeFormatOptions) => new Date(t).toLocaleDateString(undefined, { timeZone: 'UTC', ...o });
+
+/** The bucket a calendar day (YYYY-MM-DD) belongs to. */
+function bucketKey(day: string, grain: Grain): string {
+  if (grain === 'day') return day;
+  if (grain === 'month') return day.slice(0, 7);
+  const t = utcDay(day);
+  const monday = t - ((new Date(t).getUTCDay() + 6) % 7) * 86_400_000;
+  return keyOfUtc(monday);
+}
+
+function bucketLabels(key: string, grain: Grain): { label: string; short: string } {
+  if (grain === 'month') {
+    const [y, m] = ymd(key);
+    const t = Date.UTC(y, m - 1, 1);
+    return { label: fmtUtc(t, { month: 'long', year: 'numeric' }), short: fmtUtc(t, { month: 'short' }) };
+  }
+  const t = utcDay(key);
+  const short = fmtUtc(t, { day: 'numeric', month: 'numeric' });
+  if (grain === 'day') return { label: fmtUtc(t, { weekday: 'short', day: 'numeric', month: 'short' }), short };
+  return { label: `Week of ${fmtUtc(t, { day: 'numeric', month: 'short' })}`, short };
+}
+
+/** Start of the selected period (epoch ms); "all" starts at the oldest alert. */
+export function periodStart(period: Period, now: number, tz: string | undefined, list: Episode[]): number {
+  if (period === 'today') return startOfDay(now, tz);
+  if (period === 'all') return list.length ? Math.min(now, Date.parse(list[0].start)) : now;
+  return now - Number(period) * 86_400_000;
+}
+
+/**
+ * Every day/week/month from `from` to `now` (also empty ones), with the alerts that began in it.
+ * Calendar days are taken in time zone `tz`.
+ */
+export function buckets(list: Episode[], grain: Grain, from: number, now: number, tz: string | undefined): Bucket[] {
+  const out: Bucket[] = [];
+  const index = new Map<string, Bucket>();
+  const last = dayKey(now, tz);
+  for (let t = utcDay(dayKey(from, tz)); ; t += 86_400_000) {
+    const day = keyOfUtc(t);
+    const key = bucketKey(day, grain);
+    if (!index.has(key)) {
+      const b = { key, ...bucketLabels(key, grain), items: [] };
+      index.set(key, b);
+      out.push(b);
+    }
+    if (day >= last) break;
+  }
+  for (const e of list) index.get(bucketKey(dayKey(e.start, tz), grain))?.items.push(e);
+  return out;
+}
+
+/** Axis labels: about five, evenly spread, always including the last bar. */
+export function spreadTicks(labels: string[], count = 5): { i: number; text: string }[] {
+  if (labels.length <= count) return labels.map((text, i) => ({ i, text }));
+  const step = Math.ceil(labels.length / count);
+  const ticks: { i: number; text: string }[] = [];
+  for (let i = labels.length - 1; i >= 0; i -= step) ticks.unshift({ i, text: labels[i] });
+  return ticks;
+}
+
+// ---------------------------------------------------------------- durations
+
+/** Duration in minutes of a finished alert; null while running or if its end is unknown. */
+export const durationMin = (e: Episode): number | null =>
+  e.how === 'ended' && e.end ? (Date.parse(e.end) - Date.parse(e.start)) / 60_000 : null;
+
+export function median(values: number[]): number | null {
+  if (!values.length) return null;
+  const s = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+export const average = (values: number[]): number | null =>
+  values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+
+/** Duration classes for the distribution chart, in minutes. */
+export const DURATION_BINS: { label: string; max: number }[] = [
+  { label: '<15 min', max: 15 },
+  { label: '15–30 min', max: 30 },
+  { label: '30–60 min', max: 60 },
+  { label: '1–2 h', max: 120 },
+  { label: '2–4 h', max: 240 },
+  { label: '4–8 h', max: 480 },
+  { label: '8 h+', max: Infinity },
+];
+
+export function durationBins(minutes: number[]): number[] {
+  const counts = DURATION_BINS.map(() => 0);
+  for (const m of minutes) counts[DURATION_BINS.findIndex((b) => m < b.max)] += 1;
+  return counts;
+}
+
+/** Minutes as "45 min", "1 h 30 min", … */
+export const fmtMin = (m: number) => fmtDuration(m * 60_000);

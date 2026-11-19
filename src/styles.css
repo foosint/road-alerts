@@ -639,6 +639,45 @@ button[aria-pressed='true'] {
   padding: 1px 12px 1px 0;
 }
 
+/* ---- trend / duration */
+.segmented {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segmented button {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--border);
+}
+
+.change-row {
+  grid-template-columns: minmax(0, 1fr) auto 76px;
+}
+
+.delta {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--muted);
+}
+
+.delta.up {
+  color: #e03131; /* more alerts / longer */
+}
+
+.delta.down {
+  color: #2f9e44; /* fewer alerts / shorter */
+}
+
 /* ---- alerts per road */
 .ranking {
   display: flex;
@@ -647,7 +686,7 @@ button[aria-pressed='true'] {
 
 .rank-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 70px 24px;
+  grid-template-columns: minmax(0, 1fr) 56px minmax(24px, auto);
   align-items: center;
   gap: 6px;
   border: none;
@@ -682,6 +721,7 @@ button[aria-pressed='true'] {
 }
 
 .rank-n {
+  white-space: nowrap;
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
