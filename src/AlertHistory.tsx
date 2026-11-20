@@ -63,7 +63,10 @@ export default function AlertHistory(p: Props) {
   const label = zoneLabel(timeMode, selectedId ? [selectedId] : Object.keys(alerts.roads));
   // Calendar days for the trend charts are taken in the selected zone (of the road, if one is selected).
   const zone = tz(selectedId ?? undefined);
-  const from = periodStart(period, now, zone, own);
+  // The period picks which days/weeks/months the trend charts show; each of them is counted in full,
+  // so "yesterday" has the same value whichever period is selected. Hence all alerts, not `own`.
+  const ownAll = selectedId ? all.filter((e) => e.road === selectedId) : all;
+  const from = periodStart(period, now, zone, ownAll);
 
   const controls = (
     <div className="history-controls">
@@ -101,7 +104,7 @@ export default function AlertHistory(p: Props) {
   } else if (tab === 'hours') {
     content = <HoursTab list={own} tz={tz} tzLabel={label} name={name} onSelect={selectedId ? undefined : onSelect} />;
   } else {
-    const bs = buckets(own, grain, from, now, zone);
+    const bs = buckets(ownAll, grain, from, now, zone); // buckets group by calendar key: always complete
     content = tab === 'trend'
       ? <TrendTab bs={bs} grain={grain} control={grainSelect} name={name} onSelect={selectedId ? undefined : onSelect} />
       : <DurationTab list={own} bs={bs} grain={grain} control={grainSelect} name={name} onSelect={selectedId ? undefined : onSelect} />;
