@@ -38,6 +38,24 @@ export type AlertsData = {
   statusSince?: string;
 };
 
+/** A NASA FIRMS hotspot near a road, from data/fires.geojson. */
+export type FireProps = {
+  id: string;
+  /** Satellite overpass time (UTC). */
+  t: string;
+  /** t in ms, added on load. */
+  ms: number;
+  sat: string;
+  conf: 'low' | 'nominal' | 'high' | null;
+  /** Fire radiative power in MW. */
+  frp: number | null;
+  day: boolean;
+  /** Nearest road and the distance to it. */
+  road: string;
+  km: number;
+};
+export type FiresData = FeatureCollection<Point, FireProps> & { maxKm?: number; hours?: number; updatedAt?: string };
+
 /**
  * How often the data is re-checked. Each check costs one GitHub API request, and GitHub
  * allows 60 an hour per IP without login, so this stays above 60 s (leaves room for Refresh).
@@ -91,11 +109,12 @@ export function useRoadData() {
   const [roads, setRoads] = useState<RoadsData | null>(null);
   const [cities, setCities] = useState<CitiesData | null>(null);
   const [alerts, setAlerts] = useState<AlertsData | null>(null);
+  const [fires, setFires] = useState<FiresData | null>(null);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const [changedAt, setChangedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const last = useRef({ roads: '', cities: '', alerts: '' });
+  const last = useRef({ roads: '', cities: '', alerts: '', fires: '' });
   const lastBase = useRef('');
 
   const refresh = useCallback(async () => {
@@ -106,10 +125,11 @@ export function useRoadData() {
         setError(null);
         return; // same commit as last time: nothing new to load
       }
-      const [r, c, a] = await Promise.all([
+      const [r, c, a, fi] = await Promise.all([
         fetchText(base, 'roads.geojson'),
         fetchText(base, 'cities.geojson'),
         fetchText(base, 'alerts.json', true), // missing until the data repo has its first alert log
+        fetchText(base, 'fires.geojson', true).catch(() => last.current.fires), // extra: never fail the update
       ]);
       lastBase.current = base;
       // Only hand new objects to the map when the file content actually changed.
@@ -127,6 +147,12 @@ export function useRoadData() {
       if (a !== last.current.alerts) {
         last.current.alerts = a;
         setAlerts(a ? JSON.parse(a) : null);
+      }
+      if (fi !== last.current.fires) {
+        last.current.fires = fi;
+        const parsed: FiresData | null = fi ? JSON.parse(fi) : null;
+        for (const f of parsed?.features ?? []) f.properties.ms = Date.parse(f.properties.t);
+        setFires(parsed);
       }
       setError(null);
     } catch (e) {
@@ -149,5 +175,5 @@ export function useRoadData() {
     };
   }, [refresh]);
 
-  return { roads, cities, alerts, checkedAt, changedAt, error, loading, refresh };
+  return { roads, cities, alerts, fires, checkedAt, changedAt, error, loading, refresh };
 }

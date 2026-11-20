@@ -5,7 +5,7 @@ import maplibregl, {
   type Map as MlMap,
   type StyleSpecification,
 } from 'maplibre-gl';
-import type { CitiesData, RoadProps, RoadsData } from './data';
+import type { CitiesData, FireProps, FiresData, RoadProps, RoadsData } from './data';
 import { statusColor, statusColorExpr } from './colors';
 import { fmtTime, type TzFor } from './history';
 
@@ -103,6 +103,32 @@ function baseStyle(active: string): StyleSpecification {
   } as StyleSpecification;
 }
 
+/**
+ * Fire signals, coloured by age in hours: bright yellow when new, through orange to a
+ * faded brown at 24 h. The age is computed against `now`, which the page updates every minute.
+ */
+export const FIRE_AGE_STOPS: [number, string][] = [
+  [0, '#ffe066'],
+  [3, '#ffa94d'],
+  [8, '#f76707'],
+  [16, '#a8461b'],
+  [24, '#6b4f3a'],
+];
+const fireAge = (now: number): ExpressionSpecification => ['/', ['-', now, ['get', 'ms']], 3_600_000];
+const firePaint = (now: number) => {
+  const age = fireAge(now);
+  return {
+    'circle-color': ['interpolate', ['linear'], age, ...FIRE_AGE_STOPS.flat()] as ExpressionSpecification,
+    'circle-opacity': ['interpolate', ['linear'], age, 0, 1, 24, 0.5] as ExpressionSpecification,
+    'circle-stroke-opacity': ['interpolate', ['linear'], age, 0, 1, 24, 0.4] as ExpressionSpecification,
+    'circle-radius': ['interpolate', ['linear'], ['zoom'],
+      5, ['interpolate', ['linear'], age, 0, 5.5, 24, 3],
+      12, ['interpolate', ['linear'], age, 0, 10, 24, 6]] as ExpressionSpecification,
+  };
+};
+/** A soft glow behind signals of the last 3 hours. */
+const freshFilter = (now: number): ExpressionSpecification => ['<', fireAge(now), 3];
+
 const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -131,6 +157,25 @@ function popupHtml(p: RoadProps, tz: string | undefined, hint = false) {
     </div>`;
 }
 
+const CONF: Record<string, string> = { low: 'low', nominal: 'nominal', high: 'high' };
+
+function firePopupHtml(p: FireProps, roadName: string, tz: string | undefined, now: number) {
+  const h = (now - p.ms) / 3_600_000;
+  const ago = h < 1 ? `${Math.max(1, Math.round(h * 60))} min ago` : `${h < 10 ? h.toFixed(1) : Math.round(h)} h ago`;
+  return `
+    <div class="popup">
+      <div class="popup-title">Fire signal (NASA FIRMS)</div>
+      <table>
+        <tr><th>Detected</th><td>${esc(fmtTime(p.t, tz))} · ${esc(ago)}</td></tr>
+        <tr><th>Road</th><td>${esc(roadName)}, ${esc(p.km.toFixed(1))} km away</td></tr>
+        <tr><th>Satellite</th><td>${esc(p.sat)}, ${p.day ? 'day' : 'night'} pass</td></tr>
+        <tr><th>Confidence</th><td>${esc(p.conf ? CONF[p.conf] ?? p.conf : '—')}</td></tr>
+        <tr><th>Fire power</th><td>${p.frp === null ? '—' : `${esc(p.frp)} MW`}</td></tr>
+      </table>
+      <div class="popup-hint">A heat signal seen from space: a fire, a strike or a flare. The time is when the satellite passed.</div>
+    </div>`;
+}
+
 type Props = {
   roads: RoadsData | null;
   cities: CitiesData | null;
@@ -143,15 +188,20 @@ type Props = {
   playbackStatus: Record<string, string> | null;
   /** Time zone for a road's times in popups (undefined = the viewer's own). */
   timeZoneFor: TzFor;
+  fires: FiresData | null;
+  showFires: boolean;
+  /** Current time, rounded to the minute: fire signals are coloured by their age. */
+  now: number;
 };
 
-export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, timeZoneFor, playbackStatus }: Props) {
+export default function RoadMap(props: Props) {
+  const { roads, cities, basemap, selectedId, fires, showFires, now, playbackStatus } = props;
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const loaded = useRef(false);
   const fitted = useRef(false);
-  const pending = useRef<Props>({ roads, cities, basemap, selectedId, onSelect, timeZoneFor, playbackStatus });
-  pending.current = { roads, cities, basemap, selectedId, onSelect, timeZoneFor, playbackStatus };
+  const pending = useRef<Props>(props);
+  pending.current = props;
 
   // Create the map once.
   useEffect(() => {
@@ -169,6 +219,7 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
     map.on('load', () => {
       map.addSource('roads', { type: 'geojson', data: EMPTY, promoteId: 'id' }); // ids for feature-state
       map.addSource('cities', { type: 'geojson', data: EMPTY });
+      map.addSource('fires', { type: 'geojson', data: EMPTY });
       // Dark halo under the selected road.
       map.addLayer({
         id: 'roads-selected',
@@ -202,6 +253,27 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
           'line-color': statusColorExpr(STATUS),
           'line-width': ['interpolate', ['linear'], ['zoom'], 5, ['case', IS_NEUTRAL, 2, 4], 12, ['case', IS_NEUTRAL, 5, 8]],
         },
+      });
+      // Fire signals: above the roads, below the towns. Oldest drawn first, newest on top.
+      const now0 = pending.current.now;
+      map.addLayer({
+        id: 'fires-glow',
+        type: 'circle',
+        source: 'fires',
+        filter: freshFilter(now0),
+        paint: {
+          'circle-color': '#ffd43b',
+          'circle-opacity': 0.45,
+          'circle-blur': 0.9,
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 13, 12, 22],
+        },
+      });
+      map.addLayer({
+        id: 'fires',
+        type: 'circle',
+        source: 'fires',
+        layout: { 'circle-sort-key': ['get', 'ms'] },
+        paint: { ...firePaint(now0), 'circle-stroke-color': '#2b1a0e', 'circle-stroke-width': 1 },
       });
       map.addLayer({
         id: 'cities',
@@ -260,10 +332,33 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
 
       const overTown = (e: maplibregl.MapLayerMouseEvent) =>
         map.queryRenderedFeatures(e.point, { layers: ['cities-hit'] }).length > 0;
+      const overFire = (e: maplibregl.MapLayerMouseEvent) =>
+        !!map.getLayer('fires') && map.getLayoutProperty('fires', 'visibility') !== 'none' &&
+        map.queryRenderedFeatures(e.point, { layers: ['fires'] }).length > 0;
+
+      // Fire signal details on hover (tap on touch screens).
+      const showFire = (e: maplibregl.MapLayerMouseEvent) => {
+        const f = e.features?.[0];
+        if (!f || f.geometry.type !== 'Point' || overTown(e)) return;
+        const p = f.properties as FireProps;
+        const road = pending.current.roads?.features.find((x) => x.properties.id === p.road)?.properties;
+        map.getCanvas().style.cursor = 'default';
+        hoverPopup
+          .setLngLat(f.geometry.coordinates as [number, number])
+          .setHTML(firePopupHtml(p, road ? `${road.from} → ${road.to}` : p.road, pending.current.timeZoneFor(p.road), Date.now()))
+          .addTo(map);
+      };
+      map.on('mousemove', 'fires', showFire);
+      map.on('click', 'fires', showFire);
+      map.on('mouseleave', 'fires', () => {
+        map.getCanvas().style.cursor = '';
+        hoverPopup.remove();
+      });
 
       map.on('mousemove', 'roads-hit', (e) => {
         const f = e.features?.[0];
         const p = f?.properties as RoadProps | undefined;
+        if (overFire(e)) return; // the fire popup has priority
         if (!p || overTown(e)) {
           hoverPopup.remove();
           return;
@@ -280,7 +375,7 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
       });
       map.on('click', 'roads-hit', (e) => {
         const p = e.features?.[0]?.properties as RoadProps | undefined;
-        if (!p || overTown(e)) return;
+        if (!p || overTown(e) || overFire(e)) return;
         hoverPopup.remove();
         pending.current.onSelect(p.id);
       });
@@ -303,7 +398,7 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
 
   function apply(map: MlMap) {
     if (!loaded.current) return;
-    const { roads: r, cities: c, basemap: b, selectedId: sel, playbackStatus: pb } = pending.current;
+    const { roads: r, cities: c, basemap: b, selectedId: sel, playbackStatus: pb, fires: fi, showFires: sf, now: t } = pending.current;
     map.setFilter('roads-selected', ['==', ['get', 'id'], sel ?? '']);
     for (const bm of BASEMAPS) {
       for (const id of baseLayers(bm)) map.setLayoutProperty(id, 'visibility', bm.id === b ? 'visible' : 'none');
@@ -312,6 +407,10 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
     if (pb) for (const [id, status] of Object.entries(pb)) map.setFeatureState({ source: 'roads', id }, { pb: status });
     else map.removeFeatureState({ source: 'roads' });
     if (c) (map.getSource('cities') as GeoJSONSource).setData(c);
+    (map.getSource('fires') as GeoJSONSource).setData(fi ?? EMPTY);
+    for (const id of ['fires-glow', 'fires']) map.setLayoutProperty(id, 'visibility', sf ? 'visible' : 'none');
+    for (const [k, v] of Object.entries(firePaint(t))) map.setPaintProperty('fires', k, v);
+    map.setFilter('fires-glow', freshFilter(t));
     if (r && !fitted.current && r.features.length) {
       const bounds = new maplibregl.LngLatBounds();
       r.features.forEach((f) => f.geometry.coordinates.forEach((pt) => bounds.extend(pt as [number, number])));
@@ -322,7 +421,7 @@ export default function RoadMap({ roads, cities, basemap, selectedId, onSelect, 
 
   useEffect(() => {
     if (mapRef.current) apply(mapRef.current);
-  }, [roads, cities, basemap, selectedId, playbackStatus]);
+  }, [roads, cities, basemap, selectedId, playbackStatus, fires, showFires, now]);
 
   // Bring a road selected from the list into view (no move if it is already visible).
   useEffect(() => {

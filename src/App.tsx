@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import RoadMap, { BASEMAPS } from './RoadMap';
+import RoadMap, { BASEMAPS, FIRE_AGE_STOPS } from './RoadMap';
 import { POLL_MS, useRoadData } from './data';
 import { STATUS_COLORS, statusColor } from './colors';
 import AlertHistory from './AlertHistory';
@@ -41,7 +41,9 @@ function ago(date: Date | string | null | undefined, now: number) {
 }
 
 export default function App() {
-  const { roads, cities, alerts, checkedAt, error, loading, refresh } = useRoadData();
+  const { roads, cities, alerts, fires, checkedAt, error, loading, refresh } = useRoadData();
+  const [firesPref, setFiresPref] = usePref('road-alerts.fires', ['on', 'off'] as const);
+  const showFires = firesPref === 'on';
   const [basemap, chooseBasemap] = usePref('road-alerts.basemap', BASEMAP_IDS);
   const [timeMode, setTimeMode] = usePref<TimeMode>('road-alerts.time', TIME_IDS);
   const [period, setPeriod] = usePref<Period>('road-alerts.period', PERIOD_IDS);
@@ -103,7 +105,7 @@ export default function App() {
   }, [roads]);
 
   return (
-    <div className="app">
+    <div className={`app${playbackOn ? ' pb-on' : ''}`}>
       <RoadMap
         roads={roads}
         cities={cities}
@@ -115,6 +117,9 @@ export default function App() {
         }}
         timeZoneFor={tzFor(timeMode)}
         playbackStatus={pbStatus}
+        fires={fires}
+        showFires={showFires}
+        now={Math.floor(now / 60_000) * 60_000}
       />
 
       {playbackOn && (
@@ -158,6 +163,29 @@ export default function App() {
                   <span className="count">{count}</span>
                 </div>
               ))}
+            </section>
+
+            <section className="fires-toggle">
+              <label title="NASA FIRMS heat signals from satellites, near a road, in the last 24 hours">
+                <input type="checkbox" checked={showFires} onChange={(e) => setFiresPref(e.target.checked ? 'on' : 'off')} />
+                <span className="fire-dot" />
+                <span className="status">Fire signals near roads</span>
+                <span className="count">{fires ? fires.features.length : '—'}</span>
+              </label>
+              {showFires && (
+                <div className="fire-scale" aria-label="Colour by age: yellow is new, brown is 24 hours old">
+                  <span>now</span>
+                  <i style={{ background: `linear-gradient(to right, ${FIRE_AGE_STOPS.map(([h, c]) => `${c} ${(h / 24) * 100}%`).join(', ')})` }} />
+                  <span>{fires?.hours ?? 24} h ago</span>
+                </div>
+              )}
+              {showFires && fires && (
+                <div className="muted small">
+                  Within {fires.maxKm ?? 3} km of a road · NASA FIRMS (VIIRS, MODIS)
+                  {fires.updatedAt ? ` · updated ${ago(fires.updatedAt, now)}` : ''}
+                </div>
+              )}
+              {showFires && !fires && <div className="muted small">No fire data yet.</div>}
             </section>
 
             <section className="times">

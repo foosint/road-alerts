@@ -5,7 +5,7 @@ A map of road segments in Crimea, Kherson, Zaporizhzhia, Donetsk and Luhansk, co
 The data isn't stored in this repo. The page fetches it at runtime from the [road-alerts-data](../road-alerts-data) repo, which a Raspberry Pi updates whenever the alert feed changes. New data therefore needs no rebuild or redeploy of this site.
 
 ```
-road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/alerts.json
+road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/alerts.json, data/fires.geojson
             ▲                              │ raw.githubusercontent.com
    Pi pushes on change                     ▼
                                 road-alerts page polls every 90 s
@@ -35,6 +35,12 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - **Time zone:** *Kyiv time* (default) uses Ukraine's official time (UTC+2, UTC+3 in summer). *My time* uses the viewer's own zone. *Local Russian time (MSK)* shows the clock time in use where the road is: Moscow time, UTC+3 all year. In winter it is an hour ahead of Kyiv time; in summer they match. The labels name the offset, e.g. "Kyiv time, UTC+2" or "MSK, UTC+3". The setting also applies to the times in the hover popups. All roads in the feed currently keep UTC+3 all year. A road with a different zone can be added to `ROAD_TZ_BY_ROAD` in [src/history.ts](src/history.ts).
   - The counts and charts are per road: an activation that covers two roads counts as two alerts. Days, weeks and months are calendar days in the selected time zone.
   - Each chart shows its value above every bar (above only the highest bar when there are too many bars for the labels to fit, e.g. 30 days), and has a hover tooltip and a **Table** view.
+- **Fire signals:** [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/) satellite heat signals (hotspots) of the last 24 hours, only those within 3 km of a road segment (set by `FIRMS_MAX_KM` in the data repo).
+  - Turn them on or off with **Fire signals near roads** in the status panel; the count shows how many there are. The setting is saved.
+  - The colour shows the age: yellow when new, through orange to brown at 24 hours. Older signals are also smaller and fainter, and signals of the last 3 hours get a yellow glow.
+  - Hover or tap a signal for the detection time, how long ago that was, the nearest road and the distance to it, the satellite, the confidence and the fire power.
+  - The time is when a satellite passed over, a few times a day, not when the fire started. A hotspot can be a fire, a strike, a gas flare or a hot industrial site.
+  - The data comes from `fires.geojson` in the data repo. If it is missing, the page works as before.
 - **Town markers:** black dots that show the town name on hover, or on tap on touch screens.
 - **Status panel** with:
   - a legend with every status in `STATUS_COLORS`, even when no segment has it, and the number of segments per status;
@@ -54,8 +60,8 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - **Live** or ✕ returns to the current state.
   - Playback uses the per-road alerts from the log, so alerts with an unknown end (from before `statusSince`) are not shown.
 - **Theme switch:** the button next to the title cycles through system (◐, follows the device setting), light (☀) and dark (☾). This sets the colours of the panels; the base map stays the same.
-- **Saved settings:** the page remembers the base map, period, time zone and theme for each browser.
-- **Auto-refresh.** The page fetches `roads.geojson`, `cities.geojson` and `alerts.json` every 90 seconds, when the tab becomes visible again, or when you press **Refresh**. Reloading the page also loads the latest data. The map only redraws when a file's content has changed.
+- **Saved settings:** the page remembers the base map, period, time zone, theme and whether fire signals are shown, for each browser.
+- **Auto-refresh.** The page fetches `roads.geojson`, `cities.geojson`, `alerts.json` and `fires.geojson` every 90 seconds, when the tab becomes visible again, or when you press **Refresh**. Reloading the page also loads the latest data. The map only redraws when a file's content has changed.
 
 ## Where the data comes from
 
@@ -104,4 +110,5 @@ GitHub Pages on a free account requires a **public** repository. The `road-alert
 
 - Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
 - Esri tiles © Esri.
+- Fire data: NASA FIRMS (VIIRS and MODIS active fire products), LANCE / NASA EOSDIS.
 - Routes are computed with [OSRM](https://project-osrm.org/) on OpenStreetMap data.
