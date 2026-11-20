@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import RoadMap, { BASEMAPS, FIRE_AGE_STOPS } from './RoadMap';
+import RoadMap, { BASEMAPS, BRIDGE_STYLE, FIRE_AGE_STOPS } from './RoadMap';
 import { POLL_MS, useRoadData } from './data';
 import { STATUS_COLORS, statusColor } from './colors';
 import AlertHistory from './AlertHistory';
@@ -41,9 +41,17 @@ function ago(date: Date | string | null | undefined, now: number) {
 }
 
 export default function App() {
-  const { roads, cities, alerts, fires, checkedAt, error, loading, refresh } = useRoadData();
+  const { roads, cities, alerts, fires, bridges, checkedAt, error, loading, refresh } = useRoadData();
   const [firesPref, setFiresPref] = usePref('road-alerts.fires', ['on', 'off'] as const);
   const showFires = firesPref === 'on';
+  const [bridgesPref, setBridgesPref] = usePref('road-alerts.bridges', ['off', 'on'] as const);
+  const [otherPref, setOtherPref] = usePref('road-alerts.bridges.other', ['on', 'off'] as const);
+  const showBridges = bridgesPref === 'on';
+  const bridgeCounts = useMemo(() => {
+    const n = { river: 0, other: 0, crossing: 0 };
+    for (const f of bridges?.features ?? []) n[f.properties.kind] = (n[f.properties.kind] ?? 0) + 1;
+    return n;
+  }, [bridges]);
   const [basemap, chooseBasemap] = usePref('road-alerts.basemap', BASEMAP_IDS);
   const [timeMode, setTimeMode] = usePref<TimeMode>('road-alerts.time', TIME_IDS);
   const [period, setPeriod] = usePref<Period>('road-alerts.period', PERIOD_IDS);
@@ -119,6 +127,9 @@ export default function App() {
         playbackStatus={pbStatus}
         fires={fires}
         showFires={showFires}
+        bridges={bridges}
+        showBridges={showBridges}
+        showOtherBridges={otherPref === 'on'}
         now={Math.floor(now / 60_000) * 60_000}
       />
 
@@ -165,7 +176,7 @@ export default function App() {
               ))}
             </section>
 
-            <section className="fires-toggle">
+            <section className="layer-toggle">
               <label title="NASA FIRMS heat signals from satellites, near a road, in the last 24 hours">
                 <input type="checkbox" checked={showFires} onChange={(e) => setFiresPref(e.target.checked ? 'on' : 'off')} />
                 <span className="fire-dot" />
@@ -186,6 +197,34 @@ export default function App() {
                 </div>
               )}
               {showFires && !fires && <div className="muted small">No fire data yet.</div>}
+            </section>
+
+            <section className="layer-toggle">
+              <label title="Bridges and river crossings on the road segments, from OpenStreetMap">
+                <input type="checkbox" checked={showBridges} onChange={(e) => setBridgesPref(e.target.checked ? 'on' : 'off')} />
+                <span className="bridge-dot" style={{ background: BRIDGE_STYLE.river.fill, borderColor: BRIDGE_STYLE.river.ring }} />
+                <span className="status">Bridges &amp; river crossings</span>
+                <span className="count">{bridges ? bridges.features.length : '—'}</span>
+              </label>
+              {showBridges && bridges && (
+                <div className="layer-legend">
+                  {(['river', 'crossing'] as const).map((k) => (
+                    <div key={k}>
+                      <span className="bridge-dot" style={{ background: BRIDGE_STYLE[k].fill, borderColor: BRIDGE_STYLE[k].ring }} />
+                      <span>{BRIDGE_STYLE[k].label}</span>
+                      <span className="count">{bridgeCounts[k]}</span>
+                    </div>
+                  ))}
+                  <label title="Bridges that cross no river; shown from zoom level 8">
+                    <input type="checkbox" checked={otherPref === 'on'} onChange={(e) => setOtherPref(e.target.checked ? 'on' : 'off')} />
+                    <span className="bridge-dot" style={{ background: BRIDGE_STYLE.other.fill, borderColor: BRIDGE_STYLE.other.ring }} />
+                    <span>{BRIDGE_STYLE.other.label}</span>
+                    <span className="count">{bridgeCounts.other}</span>
+                  </label>
+                  <div className="muted small">A dark red ring marks a bridge tagged as destroyed in OSM.</div>
+                </div>
+              )}
+              {showBridges && !bridges && <div className="muted small">No bridge data yet.</div>}
             </section>
 
             <section className="times">

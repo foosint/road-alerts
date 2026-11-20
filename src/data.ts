@@ -56,6 +56,30 @@ export type FireProps = {
 };
 export type FiresData = FeatureCollection<Point, FireProps> & { maxKm?: number; hours?: number; updatedAt?: string };
 
+/** A bridge or river crossing on a road segment, from data/bridges.geojson (OpenStreetMap). */
+export type BridgeKind = 'river' | 'other' | 'crossing';
+export type BridgeProps = {
+  id: string;
+  /** river: bridge over a river or canal; other: overpass, viaduct, ...; crossing: river with no bridge in OSM. */
+  kind: BridgeKind;
+  /** Road ids (MapLibre may hand this over as a JSON string). */
+  roads: string[] | string;
+  name?: string;
+  /** Name of the street or road the bridge carries. */
+  street?: string;
+  ref?: string;
+  river?: string;
+  waterway?: string;
+  /** OSM bridge type when not a plain bridge, e.g. viaduct. */
+  structure?: string;
+  length_m?: number;
+  destroyed?: boolean;
+  /** OSM way ids of the bridge (MapLibre may hand this over as a JSON string). */
+  osm?: number[] | string;
+  osm_river?: number;
+};
+export type BridgesData = FeatureCollection<Point, BridgeProps> & { generatedAt?: string; source?: string };
+
 /**
  * How often the data is re-checked. Each check costs one GitHub API request, and GitHub
  * allows 60 an hour per IP without login, so this stays above 60 s (leaves room for Refresh).
@@ -110,11 +134,12 @@ export function useRoadData() {
   const [cities, setCities] = useState<CitiesData | null>(null);
   const [alerts, setAlerts] = useState<AlertsData | null>(null);
   const [fires, setFires] = useState<FiresData | null>(null);
+  const [bridges, setBridges] = useState<BridgesData | null>(null);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const [changedAt, setChangedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const last = useRef({ roads: '', cities: '', alerts: '', fires: '' });
+  const last = useRef({ roads: '', cities: '', alerts: '', fires: '', bridges: '' });
   const lastBase = useRef('');
 
   const refresh = useCallback(async () => {
@@ -125,11 +150,12 @@ export function useRoadData() {
         setError(null);
         return; // same commit as last time: nothing new to load
       }
-      const [r, c, a, fi] = await Promise.all([
+      const [r, c, a, fi, br] = await Promise.all([
         fetchText(base, 'roads.geojson'),
         fetchText(base, 'cities.geojson'),
         fetchText(base, 'alerts.json', true), // missing until the data repo has its first alert log
         fetchText(base, 'fires.geojson', true).catch(() => last.current.fires), // extra: never fail the update
+        fetchText(base, 'bridges.geojson', true).catch(() => last.current.bridges),
       ]);
       lastBase.current = base;
       // Only hand new objects to the map when the file content actually changed.
@@ -154,6 +180,10 @@ export function useRoadData() {
         for (const f of parsed?.features ?? []) f.properties.ms = Date.parse(f.properties.t);
         setFires(parsed);
       }
+      if (br !== last.current.bridges) {
+        last.current.bridges = br;
+        setBridges(br ? JSON.parse(br) : null);
+      }
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -175,5 +205,5 @@ export function useRoadData() {
     };
   }, [refresh]);
 
-  return { roads, cities, alerts, fires, checkedAt, changedAt, error, loading, refresh };
+  return { roads, cities, alerts, fires, bridges, checkedAt, changedAt, error, loading, refresh };
 }

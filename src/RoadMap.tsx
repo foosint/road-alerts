@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
 import maplibregl, {
   type ExpressionSpecification,
+  type FilterSpecification,
   type GeoJSONSource,
   type Map as MlMap,
   type StyleSpecification,
 } from 'maplibre-gl';
-import type { CitiesData, FireProps, FiresData, RoadProps, RoadsData } from './data';
+import type { BridgeProps, BridgesData, CitiesData, FireProps, FiresData, RoadProps, RoadsData } from './data';
 import { statusColor, statusColorExpr } from './colors';
 import { fmtTime, type TzFor } from './history';
 
@@ -129,6 +130,18 @@ const firePaint = (now: number) => {
 /** A soft glow behind signals of the last 3 hours. */
 const freshFilter = (now: number): ExpressionSpecification => ['<', fireAge(now), 3];
 
+/** Bridge symbols: ring colour per kind; a destroyed bridge gets a dark red ring. */
+export const BRIDGE_STYLE = {
+  river: { fill: '#ffffff', ring: '#1c7ed6', label: 'Bridge over a river or canal' },
+  other: { fill: '#ffffff', ring: '#868e96', label: 'Other bridge (overpass, viaduct)' },
+  crossing: { fill: '#1c7ed6', ring: '#ffffff', label: 'River crossing, no bridge in OSM' },
+} as const;
+const BRIDGE_DESTROYED = '#a61e4d';
+const bridgeFilter = (showOther: boolean): FilterSpecification =>
+  showOther
+    ? ['any', ['!=', ['get', 'kind'], 'other'], ['>=', ['zoom'], 8]] // other bridges only from zoom 8 on
+    : ['!=', ['get', 'kind'], 'other'];
+
 const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -176,6 +189,39 @@ function firePopupHtml(p: FireProps, roadName: string, tz: string | undefined, n
     </div>`;
 }
 
+const asList = <T,>(v: T[] | string | undefined): T[] => {
+  if (Array.isArray(v)) return v;
+  try { return v ? JSON.parse(v) : []; } catch { return []; }
+};
+const STRUCTURE: Record<string, string> = { viaduct: 'viaduct', trestle: 'trestle', covered: 'covered bridge', movable: 'movable bridge', aqueduct: 'aqueduct', low_water_crossing: 'low-water crossing' };
+
+function bridgePopupHtml(p: BridgeProps, roadName: (id: string) => string) {
+  const kind = p.structure ? STRUCTURE[p.structure] ?? p.structure : 'bridge';
+  const title = p.kind === 'crossing'
+    ? `${esc(p.waterway === 'canal' ? 'Canal' : 'River')} crossing: ${esc(p.river)}`
+    : p.kind === 'river'
+      ? `${esc(kind[0].toUpperCase() + kind.slice(1))} over ${esc(p.river)}`
+      : esc(kind === 'bridge' ? 'Bridge (overpass)' : kind[0].toUpperCase() + kind.slice(1));
+  const osm = asList<number>(p.osm);
+  const rows = [
+    p.name && ['Name', esc(p.name)],
+    p.street && ['Street', esc(p.street)],
+    p.ref && ['Road no.', esc(p.ref)],
+    p.length_m ? ['Length', `about ${esc(p.length_m)} m`] : null,
+    ['On', asList<string>(p.roads).map((r) => esc(roadName(r))).join('<br>')],
+    p.destroyed && ['State', '<b class="destroyed">destroyed / ruins (OSM)</b>'],
+    osm.length
+      ? ['OSM', osm.map((id) => `<a href="https://www.openstreetmap.org/way/${id}" target="_blank" rel="noopener">way ${id}</a>`).join(', ')]
+      : p.osm_river ? ['OSM', `<a href="https://www.openstreetmap.org/way/${p.osm_river}" target="_blank" rel="noopener">river</a>`] : null,
+  ].filter(Boolean) as [string, string][];
+  return `
+    <div class="popup">
+      <div class="popup-title">${title}</div>
+      <table>${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>
+      ${p.kind === 'crossing' ? '<div class="popup-hint">The route crosses the water here, but OSM has no bridge: a culvert, a dam, a ford or an unmapped bridge.</div>' : ''}
+    </div>`;
+}
+
 type Props = {
   roads: RoadsData | null;
   cities: CitiesData | null;
@@ -190,6 +236,10 @@ type Props = {
   timeZoneFor: TzFor;
   fires: FiresData | null;
   showFires: boolean;
+  bridges: BridgesData | null;
+  showBridges: boolean;
+  /** Also show bridges that cross no river (overpasses, viaducts). */
+  showOtherBridges: boolean;
   /** Current time, rounded to the minute: fire signals are coloured by their age. */
   now: number;
 };
@@ -220,6 +270,7 @@ export default function RoadMap(props: Props) {
       map.addSource('roads', { type: 'geojson', data: EMPTY, promoteId: 'id' }); // ids for feature-state
       map.addSource('cities', { type: 'geojson', data: EMPTY });
       map.addSource('fires', { type: 'geojson', data: EMPTY });
+      map.addSource('bridges', { type: 'geojson', data: EMPTY });
       // Dark halo under the selected road.
       map.addLayer({
         id: 'roads-selected',
@@ -254,6 +305,22 @@ export default function RoadMap(props: Props) {
           'line-width': ['interpolate', ['linear'], ['zoom'], 5, ['case', IS_NEUTRAL, 2, 4], 12, ['case', IS_NEUTRAL, 5, 8]],
         },
       });
+      // Bridges and river crossings: on the roads, below the fire signals.
+      map.addLayer({
+        id: 'bridges',
+        type: 'circle',
+        source: 'bridges',
+        layout: { visibility: 'none', 'circle-sort-key': ['match', ['get', 'kind'], 'other', 0, 1] },
+        filter: bridgeFilter(true),
+        paint: {
+          'circle-color': ['match', ['get', 'kind'], 'crossing', BRIDGE_STYLE.crossing.fill, '#ffffff'],
+          'circle-stroke-color': ['case', ['==', ['get', 'destroyed'], true], BRIDGE_DESTROYED,
+            ['match', ['get', 'kind'], 'river', BRIDGE_STYLE.river.ring, 'other', BRIDGE_STYLE.other.ring, BRIDGE_STYLE.crossing.ring]],
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 6, 2, 12, 3],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, ['match', ['get', 'kind'], 'other', 2.5, 3.5], 12, ['match', ['get', 'kind'], 'other', 6, 7]],
+        },
+      });
+
       // Fire signals: above the roads, below the towns. Oldest drawn first, newest on top.
       const now0 = pending.current.now;
       map.addLayer({
@@ -336,6 +403,31 @@ export default function RoadMap(props: Props) {
         !!map.getLayer('fires') && map.getLayoutProperty('fires', 'visibility') !== 'none' &&
         map.queryRenderedFeatures(e.point, { layers: ['fires'] }).length > 0;
 
+      const overBridge = (e: maplibregl.MapLayerMouseEvent) =>
+        !!map.getLayer('bridges') && map.getLayoutProperty('bridges', 'visibility') !== 'none' &&
+        map.queryRenderedFeatures(e.point, { layers: ['bridges'] }).length > 0;
+      const roadName = (id: string) => {
+        const r = pending.current.roads?.features.find((x) => x.properties.id === id)?.properties;
+        return r ? `${r.from} → ${r.to}` : id;
+      };
+
+      // Bridge details on hover (tap on touch screens); a fire signal on top wins.
+      const showBridge = (e: maplibregl.MapLayerMouseEvent) => {
+        const f = e.features?.[0];
+        if (!f || f.geometry.type !== 'Point' || overTown(e) || overFire(e)) return;
+        map.getCanvas().style.cursor = 'default';
+        hoverPopup
+          .setLngLat(f.geometry.coordinates as [number, number])
+          .setHTML(bridgePopupHtml(f.properties as BridgeProps, roadName))
+          .addTo(map);
+      };
+      map.on('mousemove', 'bridges', showBridge);
+      map.on('click', 'bridges', showBridge);
+      map.on('mouseleave', 'bridges', () => {
+        map.getCanvas().style.cursor = '';
+        hoverPopup.remove();
+      });
+
       // Fire signal details on hover (tap on touch screens).
       const showFire = (e: maplibregl.MapLayerMouseEvent) => {
         const f = e.features?.[0];
@@ -358,7 +450,7 @@ export default function RoadMap(props: Props) {
       map.on('mousemove', 'roads-hit', (e) => {
         const f = e.features?.[0];
         const p = f?.properties as RoadProps | undefined;
-        if (overFire(e)) return; // the fire popup has priority
+        if (overFire(e) || overBridge(e)) return; // fire and bridge popups have priority
         if (!p || overTown(e)) {
           hoverPopup.remove();
           return;
@@ -375,7 +467,7 @@ export default function RoadMap(props: Props) {
       });
       map.on('click', 'roads-hit', (e) => {
         const p = e.features?.[0]?.properties as RoadProps | undefined;
-        if (!p || overTown(e) || overFire(e)) return;
+        if (!p || overTown(e) || overFire(e) || overBridge(e)) return;
         hoverPopup.remove();
         pending.current.onSelect(p.id);
       });
@@ -399,6 +491,7 @@ export default function RoadMap(props: Props) {
   function apply(map: MlMap) {
     if (!loaded.current) return;
     const { roads: r, cities: c, basemap: b, selectedId: sel, playbackStatus: pb, fires: fi, showFires: sf, now: t } = pending.current;
+    const { bridges: br, showBridges: sb, showOtherBridges: so } = pending.current;
     map.setFilter('roads-selected', ['==', ['get', 'id'], sel ?? '']);
     for (const bm of BASEMAPS) {
       for (const id of baseLayers(bm)) map.setLayoutProperty(id, 'visibility', bm.id === b ? 'visible' : 'none');
@@ -411,6 +504,9 @@ export default function RoadMap(props: Props) {
     for (const id of ['fires-glow', 'fires']) map.setLayoutProperty(id, 'visibility', sf ? 'visible' : 'none');
     for (const [k, v] of Object.entries(firePaint(t))) map.setPaintProperty('fires', k, v);
     map.setFilter('fires-glow', freshFilter(t));
+    (map.getSource('bridges') as GeoJSONSource).setData(br ?? EMPTY);
+    map.setLayoutProperty('bridges', 'visibility', sb ? 'visible' : 'none');
+    map.setFilter('bridges', bridgeFilter(so));
     if (r && !fitted.current && r.features.length) {
       const bounds = new maplibregl.LngLatBounds();
       r.features.forEach((f) => f.geometry.coordinates.forEach((pt) => bounds.extend(pt as [number, number])));
@@ -421,7 +517,7 @@ export default function RoadMap(props: Props) {
 
   useEffect(() => {
     if (mapRef.current) apply(mapRef.current);
-  }, [roads, cities, basemap, selectedId, playbackStatus, fires, showFires, now]);
+  }, [roads, cities, basemap, selectedId, playbackStatus, fires, showFires, now, props.bridges, props.showBridges, props.showOtherBridges]);
 
   // Bring a road selected from the list into view (no move if it is already visible).
   useEffect(() => {

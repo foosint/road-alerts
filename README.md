@@ -5,7 +5,8 @@ A map of road segments in Crimea, Kherson, Zaporizhzhia, Donetsk and Luhansk, co
 The data isn't stored in this repo. The page fetches it at runtime from the [road-alerts-data](../road-alerts-data) repo, which a Raspberry Pi updates whenever the alert feed changes. New data therefore needs no rebuild or redeploy of this site.
 
 ```
-road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/alerts.json, data/fires.geojson
+road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/alerts.json, data/fires.geojson,
+                             data/bridges.geojson
             ▲                              │ raw.githubusercontent.com
    Pi pushes on change                     ▼
                                 road-alerts page polls every 90 s
@@ -41,6 +42,13 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - Hover or tap a signal for the detection time, how long ago that was, the nearest road and the distance to it, the satellite, the confidence and the fire power.
   - The time is when a satellite passed over, a few times a day, not when the fire started. A hotspot can be a fire, a strike, a gas flare or a hot industrial site.
   - The data comes from `fires.geojson` in the data repo. If it is missing, the page works as before.
+- **Bridges & river crossings:** every bridge and river crossing on the road segments, from OpenStreetMap (`bridges.geojson` in the data repo).
+  - Turn them on with **Bridges & river crossings** in the status panel (off by default). The legend under it shows the three symbols and their counts.
+  - **Blue ring:** a bridge over a river or canal.
+  - **Solid blue dot:** the route crosses a river or canal, but OSM has no bridge there (a culvert, a dam, a ford or an unmapped bridge).
+  - **Grey ring:** any other bridge, such as an overpass or a viaduct. These appear from zoom level 8 on, and the **Other bridge** checkbox hides them completely.
+  - **Dark red ring:** a bridge tagged as destroyed in OSM.
+  - Hover or tap one for the river, the bridge's name, the street it carries, the road number, its length, the roads it is on and links to OSM. A fire signal on top takes precedence, and a bridge takes precedence over the road under it.
 - **Town markers:** black dots that show the town name on hover, or on tap on touch screens.
 - **Status panel** with:
   - a legend with every status in `STATUS_COLORS`, even when no segment has it, and the number of segments per status;
@@ -60,8 +68,8 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - **Live** or ✕ returns to the current state.
   - Playback uses the per-road alerts from the log, so alerts with an unknown end (from before `statusSince`) are not shown.
 - **Theme switch:** the button next to the title cycles through system (◐, follows the device setting), light (☀) and dark (☾). This sets the colours of the panels; the base map stays the same.
-- **Saved settings:** the page remembers the base map, period, time zone, theme and whether fire signals are shown, for each browser.
-- **Auto-refresh.** The page fetches `roads.geojson`, `cities.geojson`, `alerts.json` and `fires.geojson` every 90 seconds, when the tab becomes visible again, or when you press **Refresh**. Reloading the page also loads the latest data. The map only redraws when a file's content has changed.
+- **Saved settings:** the page remembers the base map, period, time zone, theme and which of fire signals, bridges and other bridges are shown, for each browser.
+- **Auto-refresh.** The page fetches `roads.geojson`, `cities.geojson`, `alerts.json`, `fires.geojson` and `bridges.geojson` every 90 seconds, when the tab becomes visible again, or when you press **Refresh**. Reloading the page also loads the latest data. The map only redraws when a file's content has changed.
 
 ## Where the data comes from
 
@@ -110,5 +118,6 @@ GitHub Pages on a free account requires a **public** repository. The `road-alert
 
 - Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
 - Esri tiles © Esri.
+- Bridges and rivers: © OpenStreetMap contributors.
 - Fire data: NASA FIRMS (VIIRS and MODIS active fire products), LANCE / NASA EOSDIS.
 - Routes are computed with [OSRM](https://project-osrm.org/) on OpenStreetMap data.
