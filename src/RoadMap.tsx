@@ -75,9 +75,6 @@ export const BASEMAPS: Basemap[] = [
 const baseLayers = (b: Basemap) => (b.labels ? [`base-${b.id}`, `base-${b.id}-labels`] : [`base-${b.id}`]);
 
 const EMPTY = { type: 'FeatureCollection' as const, features: [] };
-/** Keep fitted roads clear of the left sidebar on wide screens. */
-const fitPadding = (p: number) =>
-  window.innerWidth > 700 ? { top: p, bottom: p, right: p, left: 384 + p } : p;
 
 /** A road's status: the playback status (feature-state "pb") while playing back, else the live one. */
 const STATUS: ExpressionSpecification = ['coalesce', ['feature-state', 'pb'], ['get', 'status']];
@@ -263,8 +260,11 @@ export default function RoadMap(props: Props) {
       attributionControl: { compact: true },
     });
     mapRef.current = map;
+    // The map's box changes when the sidebar opens or closes, or the window is resized.
+    const ro = new ResizeObserver(() => map.resize());
+    ro.observe(container.current!);
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
-    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right'); // the sidebar covers the left edge
+    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 
     map.on('load', () => {
       map.addSource('roads', { type: 'geojson', data: EMPTY, promoteId: 'id' }); // ids for feature-state
@@ -481,6 +481,7 @@ export default function RoadMap(props: Props) {
     });
 
     return () => {
+      ro.disconnect();
       loaded.current = false;
       fitted.current = false;
       map.remove();
@@ -510,7 +511,7 @@ export default function RoadMap(props: Props) {
     if (r && !fitted.current && r.features.length) {
       const bounds = new maplibregl.LngLatBounds();
       r.features.forEach((f) => f.geometry.coordinates.forEach((pt) => bounds.extend(pt as [number, number])));
-      map.fitBounds(bounds, { padding: fitPadding(40), duration: 0 });
+      map.fitBounds(bounds, { padding: 40, duration: 0 });
       fitted.current = true;
     }
   }
@@ -528,7 +529,7 @@ export default function RoadMap(props: Props) {
     f.geometry.coordinates.forEach((pt) => bounds.extend(pt as [number, number]));
     const view = map.getBounds();
     if (view.contains(bounds.getSouthWest()) && view.contains(bounds.getNorthEast())) return;
-    map.fitBounds(bounds, { padding: fitPadding(60), maxZoom: 10, duration: 600 });
+    map.fitBounds(bounds, { padding: 60, maxZoom: 10, duration: 600 });
   }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <div ref={container} className="map" />;

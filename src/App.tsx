@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import RoadMap, { BASEMAPS, BRIDGE_STYLE, FIRE_AGE_STOPS } from './RoadMap';
 import { POLL_MS, useRoadData } from './data';
 import { STATUS_COLORS, statusColor } from './colors';
-import AlertHistory from './AlertHistory';
+import { AlertLog, StatsModal } from './AlertHistory';
 import Playback from './Playback';
 import { PERIODS, TIME_MODES, episodes, tzFor, tzLabel, type Period, type TimeMode } from './history';
 
@@ -74,14 +74,23 @@ export default function App() {
     setPbStatus(null);
   };
   const [now, setNow] = useState(Date.now());
-  const [open, setOpen] = useState(true);
+  const [sidebar, setSidebar] = usePref('road-alerts.sidebar', ['open', 'closed'] as const);
+  const sidebarOpen = sidebar === 'open';
+  // The status block (layers, update times, map controls) can be folded to give the log more room.
+  const [statusPref, setStatusPref] = usePref('road-alerts.status', ['open', 'closed'] as const);
+  const statusOpen = statusPref === 'open';
+  const [statsOpen, setStatsOpen] = useState(false);
 
-  // Escape clears the selected road.
+  // Escape closes the statistics window, or else clears the selected road.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setSelectedId(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (statsOpen) setStatsOpen(false);
+      else setSelectedId(null);
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [statsOpen]);
 
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 10_000);
@@ -112,59 +121,41 @@ export default function App() {
     return max ? new Date(max) : null;
   }, [roads]);
 
+  const shared = {
+    alerts, roads, selectedId, onSelect: setSelectedId, timeMode, setTimeMode, period, setPeriod, now,
+  };
+
   return (
-    <div className={`app${playbackOn ? ' pb-on' : ''}`}>
-      <RoadMap
-        roads={roads}
-        cities={cities}
-        basemap={basemap}
-        selectedId={selectedId}
-        onSelect={(id) => {
-          setSelectedId(id);
-          if (id) setOpen(true);
-        }}
-        timeZoneFor={tzFor(timeMode)}
-        playbackStatus={pbStatus}
-        fires={fires}
-        showFires={showFires}
-        bridges={bridges}
-        showBridges={showBridges}
-        showOtherBridges={otherPref === 'on'}
-        now={Math.floor(now / 60_000) * 60_000}
-      />
+    <div className={`app ${sidebarOpen ? '' : 'sidebar-closed'}`}>
+      {sidebarOpen && (
+        <aside className="sidebar">
+          <section className="sidebar-status">
+            <header>
+              <h1>Road Alerts</h1>
+              <div className="header-buttons">
+                <button
+                  className="icon"
+                  onClick={() => setTheme(nextTheme)}
+                  title={`${THEME_LABEL[theme]} (click for ${nextTheme})`}
+                  aria-label={`${THEME_LABEL[theme]}. Switch to ${nextTheme}`}
+                >
+                  {THEME_ICON[theme]}
+                </button>
+                <button
+                  className="icon"
+                  onClick={() => setStatusPref(statusOpen ? 'closed' : 'open')}
+                  aria-expanded={statusOpen}
+                  title={statusOpen ? 'Fold layers and settings' : 'Show layers and settings'}
+                  aria-label={statusOpen ? 'Fold layers and settings' : 'Show layers and settings'}
+                >
+                  {statusOpen ? '▴' : '▾'}
+                </button>
+                <button className="icon" onClick={() => setSidebar('closed')} title="Hide the sidebar" aria-label="Hide the sidebar">
+                  ⟨
+                </button>
+              </div>
+            </header>
 
-      {playbackOn && (
-        <Playback
-          episodes={allEpisodes}
-          tz={tzFor(timeMode)()}
-          tzName={tzLabel(timeMode, [])}
-          now={now}
-          onStatus={setPbStatus}
-          onClose={closePlayback}
-        />
-      )}
-
-      <div className="sidebar">
-      <aside className={`panel ${open ? '' : 'collapsed'}`}>
-        <header>
-          <h1>Road Alerts</h1>
-          <div className="header-buttons">
-            <button
-              className="icon"
-              onClick={() => setTheme(nextTheme)}
-              title={`${THEME_LABEL[theme]} (click for ${nextTheme})`}
-              aria-label={`${THEME_LABEL[theme]}. Switch to ${nextTheme}`}
-            >
-              {THEME_ICON[theme]}
-            </button>
-            <button className="icon" onClick={() => setOpen(!open)} aria-label={open ? 'Collapse' : 'Expand'}>
-              {open ? '−' : '+'}
-            </button>
-          </div>
-        </header>
-
-        {open && (
-          <>
             <section className="legend">
               {!roads && <div className="muted">{error ? 'No data' : 'Loading…'}</div>}
               {legend.map(([status, { color, count }]) => (
@@ -176,114 +167,143 @@ export default function App() {
               ))}
             </section>
 
-            <section className="layer-toggle">
-              <label title="NASA FIRMS heat signals from satellites, near a road, in the last 24 hours">
-                <input type="checkbox" checked={showFires} onChange={(e) => setFiresPref(e.target.checked ? 'on' : 'off')} />
-                <span className="fire-dot" />
-                <span className="status">Fire signals near roads</span>
-                <span className="count">{fires ? fires.features.length : '—'}</span>
-              </label>
-              {showFires && (
-                <div className="fire-scale" aria-label="Colour by age: yellow is new, brown is 24 hours old">
-                  <span>now</span>
-                  <i style={{ background: `linear-gradient(to right, ${FIRE_AGE_STOPS.map(([h, c]) => `${c} ${(h / 24) * 100}%`).join(', ')})` }} />
-                  <span>{fires?.hours ?? 24} h ago</span>
-                </div>
-              )}
-              {showFires && fires && (
-                <div className="muted small">
-                  Within {fires.maxKm ?? 3} km of a road · NASA FIRMS (VIIRS, MODIS)
-                  {fires.updatedAt ? ` · updated ${ago(fires.updatedAt, now)}` : ''}
-                </div>
-              )}
-              {showFires && !fires && <div className="muted small">No fire data yet.</div>}
-            </section>
-
-            <section className="layer-toggle">
-              <label title="Bridges and river crossings on the road segments, from OpenStreetMap">
-                <input type="checkbox" checked={showBridges} onChange={(e) => setBridgesPref(e.target.checked ? 'on' : 'off')} />
-                <span className="bridge-dot" style={{ background: BRIDGE_STYLE.river.fill, borderColor: BRIDGE_STYLE.river.ring }} />
-                <span className="status">Bridges &amp; river crossings</span>
-                <span className="count">{bridges ? bridges.features.length : '—'}</span>
-              </label>
-              {showBridges && bridges && (
-                <div className="layer-legend">
-                  {(['river', 'crossing'] as const).map((k) => (
-                    <div key={k}>
-                      <span className="bridge-dot" style={{ background: BRIDGE_STYLE[k].fill, borderColor: BRIDGE_STYLE[k].ring }} />
-                      <span>{BRIDGE_STYLE[k].label}</span>
-                      <span className="count">{bridgeCounts[k]}</span>
-                    </div>
-                  ))}
-                  <label title="Bridges that cross no river; shown from zoom level 8">
-                    <input type="checkbox" checked={otherPref === 'on'} onChange={(e) => setOtherPref(e.target.checked ? 'on' : 'off')} />
-                    <span className="bridge-dot" style={{ background: BRIDGE_STYLE.other.fill, borderColor: BRIDGE_STYLE.other.ring }} />
-                    <span>{BRIDGE_STYLE.other.label}</span>
-                    <span className="count">{bridgeCounts.other}</span>
+            {statusOpen && (
+              <>
+                <section className="layer-toggle">
+                  <label title="NASA FIRMS heat signals from satellites, near a road, in the last 24 hours">
+                    <input type="checkbox" checked={showFires} onChange={(e) => setFiresPref(e.target.checked ? 'on' : 'off')} />
+                    <span className="fire-dot" />
+                    <span className="status">Fire signals near roads</span>
+                    <span className="count">{fires ? fires.features.length : '—'}</span>
                   </label>
-                  <div className="muted small">A dark red ring marks a bridge tagged as destroyed in OSM.</div>
-                </div>
-              )}
-              {showBridges && !bridges && <div className="muted small">No bridge data yet.</div>}
-            </section>
+                  {showFires && (
+                    <div className="fire-scale" aria-label="Colour by age: yellow is new, brown is 24 hours old">
+                      <span>now</span>
+                      <i style={{ background: `linear-gradient(to right, ${FIRE_AGE_STOPS.map(([h, c]) => `${c} ${(h / 24) * 100}%`).join(', ')})` }} />
+                      <span>{fires?.hours ?? 24} h ago</span>
+                    </div>
+                  )}
+                  {showFires && fires && (
+                    <div className="muted small">
+                      Within {fires.maxKm ?? 3} km of a road · NASA FIRMS (VIIRS, MODIS)
+                      {fires.updatedAt ? ` · updated ${ago(fires.updatedAt, now)}` : ''}
+                    </div>
+                  )}
+                  {showFires && !fires && <div className="muted small">No fire data yet.</div>}
+                </section>
 
-            <section className="times">
-              <div>
-                <span>Feed updated</span>
-                <span title={roads?.source?.updatedAt}>{ago(roads?.source?.updatedAt, now)}</span>
-              </div>
-              <div>
-                <span>Latest segment change</span>
-                <span title={latestSegment?.toISOString()}>{ago(latestSegment, now)}</span>
-              </div>
-              <div>
-                <span>Checked</span>
-                <span>{ago(checkedAt, now)}</span>
-              </div>
-            </section>
+                <section className="layer-toggle">
+                  <label title="Bridges and river crossings on the road segments, from OpenStreetMap">
+                    <input type="checkbox" checked={showBridges} onChange={(e) => setBridgesPref(e.target.checked ? 'on' : 'off')} />
+                    <span className="bridge-dot" style={{ background: BRIDGE_STYLE.river.fill, borderColor: BRIDGE_STYLE.river.ring }} />
+                    <span className="status">Bridges &amp; river crossings</span>
+                    <span className="count">{bridges ? bridges.features.length : '—'}</span>
+                  </label>
+                  {showBridges && bridges && (
+                    <div className="layer-legend">
+                      {(['river', 'crossing'] as const).map((k) => (
+                        <div key={k}>
+                          <span className="bridge-dot" style={{ background: BRIDGE_STYLE[k].fill, borderColor: BRIDGE_STYLE[k].ring }} />
+                          <span>{BRIDGE_STYLE[k].label}</span>
+                          <span className="count">{bridgeCounts[k]}</span>
+                        </div>
+                      ))}
+                      <label title="Bridges that cross no river; shown from zoom level 8">
+                        <input type="checkbox" checked={otherPref === 'on'} onChange={(e) => setOtherPref(e.target.checked ? 'on' : 'off')} />
+                        <span className="bridge-dot" style={{ background: BRIDGE_STYLE.other.fill, borderColor: BRIDGE_STYLE.other.ring }} />
+                        <span>{BRIDGE_STYLE.other.label}</span>
+                        <span className="count">{bridgeCounts.other}</span>
+                      </label>
+                      <div className="muted small">A dark red ring marks a bridge tagged as destroyed in OSM.</div>
+                    </div>
+                  )}
+                  {showBridges && !bridges && <div className="muted small">No bridge data yet.</div>}
+                </section>
 
-            {error && <div className="error">Could not load data: {error}</div>}
+                <section className="times">
+                  <div>
+                    <span>Feed updated</span>
+                    <span title={roads?.source?.updatedAt}>{ago(roads?.source?.updatedAt, now)}</span>
+                  </div>
+                  <div>
+                    <span>Latest segment change</span>
+                    <span title={latestSegment?.toISOString()}>{ago(latestSegment, now)}</span>
+                  </div>
+                  <div>
+                    <span>Checked</span>
+                    <span>{ago(checkedAt, now)}</span>
+                  </div>
+                </section>
 
-            <section className="controls">
-              <select value={basemap} onChange={(e) => chooseBasemap(e.target.value)} aria-label="Base map">
-                {(['light', 'dark'] as const).map((tone) => (
-                  <optgroup key={tone} label={tone === 'light' ? 'Light maps' : 'Dark maps'}>
-                    {BASEMAPS.filter((b) => b.tone === tone).map((b) => (
-                      <option key={b.id} value={b.id}>{b.label}</option>
+                {error && <div className="error">Could not load data: {error}</div>}
+
+                <section className="controls">
+                  <select value={basemap} onChange={(e) => chooseBasemap(e.target.value)} aria-label="Base map">
+                    {(['light', 'dark'] as const).map((tone) => (
+                      <optgroup key={tone} label={tone === 'light' ? 'Light maps' : 'Dark maps'}>
+                        {BASEMAPS.filter((b) => b.tone === tone).map((b) => (
+                          <option key={b.id} value={b.id}>{b.label}</option>
+                        ))}
+                      </optgroup>
                     ))}
-                  </optgroup>
-                ))}
-              </select>
-              <button onClick={refresh} disabled={loading}>{loading ? 'Checking…' : 'Refresh'}</button>
-              <button
-                onClick={() => (playbackOn ? closePlayback() : setPlaybackOn(true))}
-                aria-pressed={playbackOn}
-                title="Replay the alerts of today or the past days"
-              >
-                {playbackOn ? 'Live' : 'Playback'}
-              </button>
-            </section>
-            <div className="muted small">Auto-refresh every {POLL_MS / 1000} s · hover a road for details, click it for its alert history</div>
-          </>
-        )}
-      </aside>
+                  </select>
+                  <button onClick={refresh} disabled={loading}>{loading ? 'Checking…' : 'Refresh'}</button>
+                  <button
+                    onClick={() => (playbackOn ? closePlayback() : setPlaybackOn(true))}
+                    aria-pressed={playbackOn}
+                    title="Replay the alerts of today or the past days"
+                  >
+                    {playbackOn ? 'Live' : 'Playback'}
+                  </button>
+                </section>
+                <div className="muted small">Auto-refresh every {POLL_MS / 1000} s · hover a road for details, click it for its alert history</div>
+              </>
+            )}
+          </section>
 
-      {open && (
-        <aside className="panel history-panel">
-          <AlertHistory
-            alerts={alerts}
-            roads={roads}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            timeMode={timeMode}
-            setTimeMode={setTimeMode}
-            period={period}
-            setPeriod={setPeriod}
-            now={now}
-          />
+          <section className="history-panel">
+            <AlertLog {...shared} onOpenStats={() => setStatsOpen(true)} />
+          </section>
         </aside>
       )}
-      </div>
+
+      <main className="map-area">
+        <RoadMap
+          roads={roads}
+          cities={cities}
+          basemap={basemap}
+          selectedId={selectedId}
+          onSelect={(id) => {
+            setSelectedId(id);
+            if (id) setSidebar('open');
+          }}
+          timeZoneFor={tzFor(timeMode)}
+          playbackStatus={pbStatus}
+          fires={fires}
+          showFires={showFires}
+          bridges={bridges}
+          showBridges={showBridges}
+          showOtherBridges={otherPref === 'on'}
+          now={Math.floor(now / 60_000) * 60_000}
+        />
+        {!sidebarOpen && (
+          <button className="sidebar-show" onClick={() => setSidebar('open')} title="Show the sidebar">
+            ⟩ Road Alerts
+          </button>
+        )}
+        {playbackOn && (
+          <Playback
+            episodes={allEpisodes}
+            tz={tzFor(timeMode)()}
+            tzName={tzLabel(timeMode, [])}
+            now={now}
+            onStatus={setPbStatus}
+            onClose={closePlayback}
+          />
+        )}
+      </main>
+
+      {statsOpen && <StatsModal {...shared} onClose={() => setStatsOpen(false)} />}
     </div>
   );
 }

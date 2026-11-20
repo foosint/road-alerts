@@ -42,20 +42,6 @@ export default function Playback({ episodes, tz, tzName, now, onStatus, onClose 
   const tRef = useRef(t);
   tRef.current = t;
 
-  // Publish the bar's height as --pb-h, so narrow layouts can end the sidebar above it.
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    const root = document.documentElement.style;
-    const ro = new ResizeObserver(() => root.setProperty('--pb-h', `${el.offsetHeight}px`));
-    ro.observe(el);
-    return () => {
-      ro.disconnect();
-      root.removeProperty('--pb-h');
-    };
-  }, []);
-
   // New range: rewind to its start.
   useEffect(() => {
     setT(from);
@@ -98,7 +84,7 @@ export default function Playback({ episodes, tz, tzName, now, onStatus, onClose 
   };
 
   return (
-    <div ref={box} className="playback" role="region" aria-label="Playback">
+    <div className="playback" role="region" aria-label="Playback">
       <div className="pb-row">
         <button className="pb-play" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
           {playing ? '❚❚' : '▶'}

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { STATUS_COLORS } from './colors';
 
-const W = 300;
-const H = 110;
+// Default size in viewBox units; text is drawn at 9 units, so a wider chart keeps small text.
+const W0 = 300;
+const H0 = 110;
 const PAD = { top: 14, right: 4, bottom: 18, left: 30 };
 
 /** A round axis maximum: 1-4 as is, otherwise the next multiple of half a power of ten. */
@@ -29,7 +30,7 @@ export type BarChartProps = {
   fmt?: (v: number) => string;
   /** Format a value in the tooltip (default: fmt), e.g. "3 alerts". */
   tipValue?: (v: number) => string;
-  /** Format the value label above each bar (default: fmt); keep it short. */
+  /** Format the value labels above the bars and the axis maximum (default: fmt); keep it short. */
   barFmt?: (v: number) => string;
   /** Added to the tooltip value, e.g. a share of the total. */
   tipExtra?: (i: number) => string;
@@ -37,12 +38,15 @@ export type BarChartProps = {
   tableHead: [string, string];
   color?: string;
   emptyText?: string;
+  /** Drawing size (viewBox units); the chart scales to its container's width. */
+  width?: number;
+  height?: number;
 };
 
 /** Single-series bar chart with a hover/tap tooltip, a peak label and a table view. */
 export default function BarChart({
   values, labels, ticks, fmt = String, barFmt = fmt, tipValue, tipExtra, ariaLabel, tableHead, color = STATUS_COLORS.busy,
-  emptyText = 'No alerts in this period.',
+  emptyText = 'No alerts in this period.', width: W = W0, height: H = H0,
 }: BarChartProps) {
   const [hover, setHover] = useState<number | null>(null);
   const nums = values.map((v) => v ?? 0);
@@ -65,7 +69,7 @@ export default function BarChart({
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={ariaLabel} onMouseLeave={() => setHover(null)}>
         <line className="grid" x1={PAD.left} x2={W - PAD.right} y1={y(max)} y2={y(max)} />
         <line className="axis" x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} />
-        <text className="tick" x={PAD.left - 4} y={y(max) + 3} textAnchor="end">{fmt(max)}</text>
+        <text className="tick" x={PAD.left - 4} y={y(max) + 3} textAnchor="end">{barFmt(max)}</text>
         <text className="tick" x={PAD.left - 4} y={y(0) + 3} textAnchor="end">0</text>
         {ticks.map(({ i, text }) => (
           <text key={i} className="tick" x={PAD.left + i * colW + colW / 2} y={H - 4} textAnchor="middle">{text}</text>
