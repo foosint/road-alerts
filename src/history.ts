@@ -154,13 +154,20 @@ function dayKey(t: string | number, tz: string | undefined): string {
  * Alerts that began in the period, plus any still running. "today" means since midnight
  * in the selected time zone (for each alert, the zone of its road).
  */
+/**
+ * Alerts that began in the period, plus every running alert. Periods are whole calendar days in
+ * the road's time zone: "Last day" is yesterday and today so far, "Last 3 days" the 3 days before
+ * today and today, so a day is never cut in half and every view counts the same alerts.
+ */
 export function inPeriod(list: Episode[], period: Period, now: number, tz: TzFor): Episode[] {
   if (period === 'all') return list;
-  if (period === 'today') {
-    return list.filter((e) => e.how === 'ongoing' || dayKey(e.start, tz(e.road)) === dayKey(now, tz(e.road)));
-  }
-  const from = now - Number(period) * 86_400_000;
-  return list.filter((e) => Date.parse(e.start) >= from || e.how === 'ongoing'); // began in the period, or still running
+  const starts = new Map<string, number>(); // period start per time zone
+  const from = (zone: string | undefined) => {
+    const key = zone ?? '';
+    if (!starts.has(key)) starts.set(key, periodStart(period, now, zone, list));
+    return starts.get(key)!;
+  };
+  return list.filter((e) => e.how === 'ongoing' || Date.parse(e.start) >= from(tz(e.road)));
 }
 
 const hourFormatters = new Map<string, Intl.DateTimeFormat>();
@@ -280,10 +287,12 @@ function bucketLabels(key: string, grain: Grain): { label: string; short: string
 }
 
 /** Start of the selected period (epoch ms); "all" starts at the oldest alert. */
+/** Start of the period: midnight of its first calendar day in `tz` (see inPeriod). */
 export function periodStart(period: Period, now: number, tz: string | undefined, list: Episode[]): number {
-  if (period === 'today') return startOfDay(now, tz);
   if (period === 'all') return list.length ? Math.min(now, Date.parse(list[0].start)) : now;
-  return now - Number(period) * 86_400_000;
+  const days = period === 'today' ? 0 : Number(period);
+  // Noon today minus N days lands on the right calendar day even across a DST change.
+  return startOfDay(startOfDay(now, tz) + 12 * 3_600_000 - days * 86_400_000, tz);
 }
 
 /**
