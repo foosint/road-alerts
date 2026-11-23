@@ -1029,3 +1029,43 @@ button.stats-open svg {
   stroke-width: 2;
   stroke-linecap: round;
 }
+
+/* ---- sidebar tabs: Alert Log | TG Reports */
+.history-tabs {
+  margin: -4px 0 10px;
+}
+
+/* ---- Telegram reports */
+.tg-event .kind {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--muted);
+  vertical-align: 1px;
+}
+
+.tg-event .kind.update {
+  color: #0c8599;
+  border-color: #0c8599;
+}
+
+.tg-event .kind.warning {
+  color: #fff;
+  background: #e8590c;
+  border-color: #e8590c;
+}
+
+.tg-title {
+  font-weight: 600;
+}
+
+.tg-desc {
+  margin: 3px 0 0;
+  color: var(--text);
+  opacity: 0.85;
+  line-height: 1.4;
+}

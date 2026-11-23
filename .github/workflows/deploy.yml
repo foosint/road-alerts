@@ -33,6 +33,9 @@ jobs:
         env:
           # Override with a repository variable DATA_URL if the data lives elsewhere.
           VITE_DATA_URL: ${{ vars.DATA_URL || format('https://raw.githubusercontent.com/{0}/road-alerts-data/main/data/', github.repository_owner) }}
+          # TG Reports tab: set the repository variable TELEGRAM_ENABLED to true to show it.
+          VITE_TELEGRAM_ENABLED: ${{ vars.TELEGRAM_ENABLED || 'false' }}
+          VITE_TELEGRAM_DATA_URL: ${{ vars.TELEGRAM_DATA_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

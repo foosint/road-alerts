@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import RoadMap, { BASEMAPS, BRIDGE_STYLE, FIRE_AGE_STOPS } from './RoadMap';
-import { POLL_MS, useRoadData } from './data';
+import { POLL_MS, TELEGRAM_ENABLED, useRoadData, useTelegramData } from './data';
 import { STATUS_COLORS, statusColor } from './colors';
-import { AlertLog, StatsModal } from './AlertHistory';
+import { AlertLog, Controls, StatsModal } from './AlertHistory';
+import TelegramLog from './TelegramLog';
 import Playback from './Playback';
 import { PERIODS, TIME_MODES, episodes, tzFor, tzLabel, type Period, type TimeMode } from './history';
 
@@ -80,6 +81,9 @@ export default function App() {
   const [statusPref, setStatusPref] = usePref('road-alerts.status', ['open', 'closed'] as const);
   const statusOpen = statusPref === 'open';
   const [statsOpen, setStatsOpen] = useState(false);
+  const tg = useTelegramData(); // does nothing unless VITE_TELEGRAM_ENABLED=true
+  const [historyTab, setHistoryTab] = usePref('road-alerts.historyTab', ['alerts', 'telegram'] as const);
+  const showTelegram = TELEGRAM_ENABLED && historyTab === 'telegram';
 
   // Escape closes the statistics window, or else clears the selected road.
   useEffect(() => {
@@ -247,7 +251,7 @@ export default function App() {
                       </optgroup>
                     ))}
                   </select>
-                  <button onClick={refresh} disabled={loading}>{loading ? 'Checking…' : 'Refresh'}</button>
+                  <button onClick={() => { refresh(); tg.refresh(); }} disabled={loading}>{loading ? 'Checking…' : 'Refresh'}</button>
                   <button
                     onClick={() => (playbackOn ? closePlayback() : setPlaybackOn(true))}
                     aria-pressed={playbackOn}
@@ -262,7 +266,24 @@ export default function App() {
           </section>
 
           <section className="history-panel">
-            <AlertLog {...shared} onOpenStats={() => setStatsOpen(true)} />
+            {TELEGRAM_ENABLED && (
+              <div className="tabs history-tabs" role="tablist">
+                <button role="tab" aria-selected={!showTelegram} onClick={() => setHistoryTab('alerts')}>Alert Log</button>
+                <button role="tab" aria-selected={showTelegram} onClick={() => setHistoryTab('telegram')}>TG Reports</button>
+              </div>
+            )}
+            {showTelegram ? (
+              <TelegramLog
+                data={tg.data}
+                error={tg.error}
+                period={period}
+                timeMode={timeMode}
+                now={now}
+                controls={<Controls period={period} setPeriod={setPeriod} timeMode={timeMode} setTimeMode={setTimeMode} />}
+              />
+            ) : (
+              <AlertLog {...shared} onOpenStats={() => setStatsOpen(true)} hideTitle={TELEGRAM_ENABLED} />
+            )}
           </section>
         </aside>
       )}
@@ -275,7 +296,10 @@ export default function App() {
           selectedId={selectedId}
           onSelect={(id) => {
             setSelectedId(id);
-            if (id) setSidebar('open');
+            if (id) {
+              setSidebar('open');
+              setHistoryTab('alerts'); // a road's history lives in the alert log
+            }
           }}
           timeZoneFor={tzFor(timeMode)}
           playbackStatus={pbStatus}

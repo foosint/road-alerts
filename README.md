@@ -42,6 +42,12 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - **Time zone:** *Kyiv time* (default) uses Ukraine's official time (UTC+2, UTC+3 in summer). *My time* uses the viewer's own zone. *Local Russian time (MSK)* shows the clock time in use where the road is: Moscow time, UTC+3 all year. In winter it is an hour ahead of Kyiv time; in summer they match. The labels name the offset, e.g. "Kyiv time, UTC+2" or "MSK, UTC+3". The setting also applies to the times in the hover popups. All roads in the feed currently keep UTC+3 all year. A road with a different zone can be added to `ROAD_TZ_BY_ROAD` in [src/history.ts](src/history.ts).
   - The counts and charts are per road: an activation that covers two roads counts as two alerts. Days, weeks and months are calendar days in the selected time zone.
   - Each chart shows its value above every bar (above only the highest bar when there are too many bars for the labels to fit, e.g. 30 days), and has a hover tooltip and a **Table** view.
+- **TG Reports** (off unless enabled, see [Telegram reports](#telegram-reports)): a second tab next to **Alert Log** in the sidebar, with road reports from public Telegram chats.
+  - Each report shows its date and time, its kind (`report`, `update` or `warning`, the last in orange), and an English title and description.
+  - The titles and descriptions are written by a local LLM in the telegram-monitor project and may contain errors.
+  - Everything else in the data (source chat, links, the original message, replies and copies) is not shown for now.
+  - The period and time zone settings apply here too. The reports have no road yet, so they are not on the map and don't follow the selected road. Clicking a road on the map switches back to **Alert Log**.
+  - The page remembers the selected tab. **Alert Log** is the default.
 - **Fire signals:** [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/) satellite heat signals (hotspots) of the last 24 hours, only those within 3 km of a road segment (set by `FIRMS_MAX_KM` in the data repo).
   - Turn them on or off with **Fire signals near roads** in the sidebar; the count shows how many there are. The setting is saved.
   - The colour shows the age: yellow when new, through orange to brown at 24 hours. Older signals are also smaller and fainter, and signals of the last 3 hours get a yellow glow.
@@ -94,6 +100,20 @@ The data location is set at build time with `VITE_DATA_URL`, the folder URL with
 3. Otherwise it loads the files from the commit URL `raw.githubusercontent.com/<owner>/road-alerts-data/<hash>/data/…`. That URL always serves exactly that commit, so new data shows up as soon as the Pi has pushed it.
 
 Without a login, the GitHub API allows 60 requests an hour per IP address. Every check counts, including "not modified" replies. That's why the page checks every 90 seconds. If the limit is reached, for example with many open tabs or many visitors behind one shared IP, the page falls back to the branch URL until the limit resets. Data can then be up to 5 minutes old again.
+
+## Telegram reports
+
+The **TG Reports** tab reads `events.json` from the telegram-monitor project (schema 1; see [../TELEGRAM_INTEGRATION.md](../TELEGRAM_INTEGRATION.md)).
+
+| Setting (build time) | Default | Meaning |
+|---|---|---|
+| `VITE_TELEGRAM_ENABLED` | `false` | `true` shows the tab and loads the reports. Otherwise there is no tab and nothing is fetched. |
+| `VITE_TELEGRAM_DATA_URL` | `https://raw.githubusercontent.com/foosint/telegram-monitor-data/main/road-events/` | Folder of `events.json`, with a trailing slash. In `npm run dev` the default is `/telegram-data/` (see below). |
+
+- **Deploy:** the workflow passes the repository variables `TELEGRAM_ENABLED` and `TELEGRAM_DATA_URL` (**Settings → Secrets and variables → Actions → Variables**). Set `TELEGRAM_ENABLED` to `true` and push or re-run the workflow to show the tab on the site.
+- **Development:** `npm run dev` serves `events.json` under `/telegram-data/` from `../../telegram-monitor/data/publish-preview/road-events` (relative to this folder), which `uv run monitor publish --no-push` fills in telegram-monitor. Set `TELEGRAM_DATA_DIR` to use another folder. To see the tab, start with the feature on, e.g. `VITE_TELEGRAM_ENABLED=true npm run dev`, or put `VITE_TELEGRAM_ENABLED=true` in `.env.local`.
+- **Loading:** the page loads the raw branch URL directly every 3 minutes (`TELEGRAM_POLL_MS` in [src/data.ts](src/data.ts)), when the tab becomes visible again, and on **Refresh**. It makes no GitHub API call for this, so the 60 API calls an hour per visitor stay free for the road data. raw.githubusercontent.com may serve a copy up to 5 minutes old, which is fine for this log.
+- A missing file (404) shows "No Telegram data yet". After an error, the last good copy stays on screen. A file with a newer schema version is refused.
 
 ## Development
 

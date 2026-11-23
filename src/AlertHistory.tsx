@@ -54,7 +54,8 @@ function useHistory({ alerts, roads, selectedId, timeMode, period, now }: Shared
   return { tz, all, list, own, ownAll, feature, name, label, zone };
 }
 
-function Controls({ period, setPeriod, timeMode, setTimeMode }: Shared) {
+/** Period and time zone selectors. */
+export function Controls({ period, setPeriod, timeMode, setTimeMode }: Pick<Shared, 'period' | 'setPeriod' | 'timeMode' | 'setTimeMode'>) {
   return (
     <div className="history-controls">
       <select value={period} onChange={(e) => setPeriod(e.target.value as Period)} aria-label="Period">
@@ -74,7 +75,7 @@ function StatusPill({ status, stroke }: { status: string; stroke?: string }) {
 // ================================================================ sidebar: the log
 
 /** The alert log in the sidebar: all roads, or the selected road. Statistics open in a window. */
-export function AlertLog(p: Shared & { onOpenStats: () => void }) {
+export function AlertLog(p: Shared & { onOpenStats: () => void; /** Tabs above already name the log. */ hideTitle?: boolean }) {
   const { alerts, selectedId, onSelect, now, onOpenStats } = p;
   const h = useHistory(p);
   const [limit, setLimit] = useState(PAGE);
@@ -101,7 +102,7 @@ export function AlertLog(p: Shared & { onOpenStats: () => void }) {
           </div>
         </>
       ) : (
-        <h2>Alert log</h2>
+        !p.hideTitle && <h2>Alert log</h2>
       )}
       <Controls {...p} />
       <div className="stats">

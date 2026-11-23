@@ -207,3 +207,95 @@ export function useRoadData() {
 
   return { roads, cities, alerts, fires, bridges, checkedAt, changedAt, error, loading, refresh };
 }
+
+// ---------------------------------------------------------------- Telegram reports
+
+/** One road event from the telegram-monitor project (events.json, schema 1). */
+export type TelegramEvent = {
+  /** `<chatId>:<messageId>`, stable and unique. */
+  id: string;
+  /** When the message was posted (UTC). */
+  at: string;
+  source: string;
+  url: string | null;
+  /** English, written by a local LLM. */
+  title: string;
+  description: string;
+  kind: 'report' | 'update' | 'warning' | string;
+  reported: string | null;
+  text: string | null;
+  replyTo: string | null;
+  copies: { source: string; url: string }[];
+  edited: boolean;
+};
+export type TelegramData = {
+  schema: number;
+  generatedAt: string;
+  windowDays: number;
+  model?: string;
+  sources: { key: string; name: string; url: string }[];
+  /** Oldest first. */
+  events: TelegramEvent[];
+};
+
+/** Off unless the build sets VITE_TELEGRAM_ENABLED=true: no tab and no requests. */
+export const TELEGRAM_ENABLED = import.meta.env.VITE_TELEGRAM_ENABLED === 'true';
+/**
+ * Where events.json lives. Production: the raw branch URL of telegram-monitor-data. Dev: the local
+ * preview folder served by vite.config.ts under /telegram-data/.
+ */
+export const TELEGRAM_DATA_URL: string =
+  import.meta.env.VITE_TELEGRAM_DATA_URL ||
+  (import.meta.env.DEV
+    ? `${import.meta.env.BASE_URL}telegram-data/`
+    : 'https://raw.githubusercontent.com/foosint/telegram-monitor-data/main/road-events/');
+/**
+ * The file is pushed at most every 5 minutes. It is loaded from the raw branch URL directly, without
+ * a GitHub API check, so it costs nothing from the visitor's 60 API calls an hour.
+ */
+export const TELEGRAM_POLL_MS = 180_000;
+const TELEGRAM_SCHEMA = 1;
+
+/** The Telegram events; does nothing when the feature is off. `refresh` checks now. */
+export function useTelegramData() {
+  const [data, setData] = useState<TelegramData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const last = useRef('');
+
+  const refresh = useCallback(async () => {
+    if (!TELEGRAM_ENABLED) return;
+    try {
+      // raw.githubusercontent.com ignores the query string and may serve a copy up to 5 min old: fine here.
+      const res = await fetch(`${TELEGRAM_DATA_URL}events.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (res.status === 404) {
+        setError(null);
+        return; // no data yet; keep whatever we had
+      }
+      if (!res.ok) throw new Error(`events.json: HTTP ${res.status}`);
+      const text = await res.text();
+      if (text !== last.current) {
+        const parsed: TelegramData = JSON.parse(text);
+        if (Math.floor(parsed.schema) > TELEGRAM_SCHEMA) throw new Error(`events.json: unsupported schema ${parsed.schema}`);
+        last.current = text;
+        setData(parsed);
+      }
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e)); // keep the last good copy
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!TELEGRAM_ENABLED) return;
+    refresh();
+    const timer = window.setInterval(refresh, TELEGRAM_POLL_MS);
+    const onVisible = () => document.visibilityState === 'visible' && refresh();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [refresh]);
+
+  return { data, error, refresh };
+}
