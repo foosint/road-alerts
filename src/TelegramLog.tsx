@@ -44,7 +44,7 @@ export default function TelegramLog({ data, error, period, timeMode, now, contro
         <>
           <div className="muted small">
             {data.events.length > 0 && <>Telegram reports since {fmtDay(data.events[0].at, zone)} · </>}
-            written by a local LLM from public chats, may contain errors · times in {label}
+            written by a local LLM from public chats, may contain errors · times in {label} · <span className="tg-experimental">Experimental</span>
           </div>
           {error && <div className="muted small">Last update failed ({error}); showing the last copy.</div>}
           <ReportList list={list} zone={zone} limit={limit} setLimit={setLimit} />
