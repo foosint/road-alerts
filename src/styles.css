@@ -626,6 +626,29 @@ button.pb-play {
   flex: 1;
 }
 
+button.pb-save {
+  font-size: 12px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.pb-saving {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pb-saving progress {
+  flex: 1;
+  height: 8px;
+}
+
+.pb-error {
+  color: var(--error);
+}
+
 .pb-track {
   position: relative;
   padding-top: 8px;

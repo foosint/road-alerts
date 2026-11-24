@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { Map as MlMap } from 'maplibre-gl';
 import RoadMap, { BASEMAPS, BRIDGE_STYLE, FIRE_AGE_STOPS } from './RoadMap';
 import { POLL_MS, TELEGRAM_ENABLED, useRoadData, useTelegramData } from './data';
 import { STATUS_COLORS, statusColor } from './colors';
@@ -66,6 +67,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [playbackOn, setPlaybackOn] = useState(false);
   const [pbStatus, setPbStatus] = useState<Record<string, string> | null>(null);
+  const [map, setMap] = useState<MlMap | null>(null);
   const allEpisodes = useMemo(
     () => episodes(alerts, (id) => roads?.features.find((f) => f.properties.id === id)?.properties.status),
     [alerts, roads],
@@ -309,6 +311,7 @@ export default function App() {
           showBridges={showBridges}
           showOtherBridges={otherPref === 'on'}
           now={Math.floor(now / 60_000) * 60_000}
+          onMap={setMap}
         />
         {!sidebarOpen && (
           <button className="sidebar-show" onClick={() => setSidebar('open')} title="Show the sidebar">
@@ -323,6 +326,7 @@ export default function App() {
             now={now}
             onStatus={setPbStatus}
             onClose={closePlayback}
+            map={map}
           />
         )}
       </main>

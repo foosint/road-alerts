@@ -69,7 +69,10 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - when the page last checked for new data.
 - **Base maps:** all of them show town names.
   - Light: OpenStreetMap (default), Esri Light Gray, Esri Streets, Esri Topographic, and Esri Imagery with a label layer on top.
-  - Dark, for use with the dark theme: Esri Dark Gray, and "OpenStreetMap dark", the normal OSM tiles with their brightness inverted by MapLibre.
+  - Dark, for use with the dark theme:
+    - Esri Dark Gray;
+    - "OpenStreetMap dark", "Esri Topographic dark" and "Esri Streets dark": the normal tiles with their brightness inverted by MapLibre;
+    - "Esri Imagery dimmed, with labels": the satellite images darkened, with the label layer on top.
   - Esri Light Gray and Dark Gray only go to zoom level 16.
   - All of these work without an API key. CARTO base maps were left out because they now require one.
 - **Playback:** press **Playback** in the sidebar to replay the alerts of today or of the last 1, 3, 7 or 30 days.
@@ -78,6 +81,11 @@ road-alerts-data (GitHub) ── data/roads.geojson, data/cities.geojson, data/a
   - Red ticks above the slider mark when alerts began.
   - The clock and "Today" follow the selected time zone.
   - **Live** or ✕ returns to the current state.
+  - **⤓ MP4** saves the whole range at the chosen speed as an MP4 video (H.264, 30 frames per second, up to Full HD, at most 10 minutes long).
+    - The video shows the map as it is on screen (base map, zoom, layers), plus the clock, the active count, a time bar with the alert starts, a legend and the map attribution.
+    - It is rendered frame by frame, so it is smooth even on a slow computer; making it takes a few seconds per second of video. Keep the tab open and don't move the map until it is done. **Cancel** stops it.
+    - The button's tooltip shows how long the video will be. If it would be longer than 10 minutes, the button is off; choose a faster speed.
+    - It needs WebCodecs with H.264 encoding: current Chrome, Edge and Safari have it; in other browsers the button is off. [src/videoExport.ts](src/videoExport.ts) does the work, with [mp4-muxer](https://github.com/Vanilagy/mp4-muxer) for the file format (loaded only when a video is saved).
   - Playback uses the per-road alerts from the log, so alerts with an unknown end (from before `statusSince`) are not shown.
 - **Theme switch:** the button next to the title cycles through system (◐, follows the device setting), light (☀) and dark (☾). This sets the colours of the panels; the base map stays the same.
 - **Saved settings:** the page remembers the base map, period, time zone, theme, which of fire signals, bridges and other bridges are shown, and whether the sidebar and its settings are open or folded, for each browser.

@@ -69,6 +69,33 @@ export const BASEMAPS: Basemap[] = [
     maxzoom: 16,
     attribution: 'Tiles © Esri',
   },
+  {
+    id: 'esri-topo-dark',
+    label: 'Esri Topographic dark',
+    tone: 'dark',
+    tiles: esri('World_Topo_Map'),
+    // The same inversion as "OpenStreetMap dark".
+    paint: { 'raster-brightness-min': 0.9, 'raster-brightness-max': 0.1, 'raster-hue-rotate': 180, 'raster-saturation': -0.5 },
+    attribution: 'Tiles © Esri',
+  },
+  {
+    id: 'esri-streets-dark',
+    label: 'Esri Streets dark',
+    tone: 'dark',
+    tiles: esri('World_Street_Map'),
+    // The same inversion as "OpenStreetMap dark".
+    paint: { 'raster-brightness-min': 0.9, 'raster-brightness-max': 0.1, 'raster-hue-rotate': 180, 'raster-saturation': -0.5 },
+    attribution: 'Tiles © Esri',
+  },
+  {
+    id: 'esri-imagery-dark',
+    label: 'Esri Imagery dimmed, with labels',
+    tone: 'dark',
+    tiles: esri('World_Imagery'),
+    labels: esri('Reference/World_Boundaries_and_Places'),
+    paint: { 'raster-brightness-max': 0.55, 'raster-saturation': -0.3 },
+    attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics',
+  },
 ];
 
 /** Layer ids of a base map: its tiles and, if it has one, its label layer. */
@@ -239,6 +266,8 @@ type Props = {
   showOtherBridges: boolean;
   /** Current time, rounded to the minute: fire signals are coloured by their age. */
   now: number;
+  /** Called with the map once it has loaded (and null when it goes away), e.g. for the video export. */
+  onMap?: (map: MlMap | null) => void;
 };
 
 export default function RoadMap(props: Props) {
@@ -478,10 +507,12 @@ export default function RoadMap(props: Props) {
 
       loaded.current = true;
       apply(map);
+      pending.current.onMap?.(map);
     });
 
     return () => {
       ro.disconnect();
+      pending.current.onMap?.(null);
       loaded.current = false;
       fitted.current = false;
       map.remove();
