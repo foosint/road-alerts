@@ -42,7 +42,7 @@ const CODECS = ['avc1.640033', 'avc1.640028', 'avc1.4d0033', 'avc1.4d0028', 'avc
 
 async function pickCodec(width: number, height: number, bitrate: number): Promise<VideoEncoderConfig> {
   for (const codec of CODECS) {
-    const config: VideoEncoderConfig = { codec, width, height, bitrate, framerate: VIDEO_FPS, avc: { format: 'avc' } };
+    const config: VideoEncoderConfig = { codec, width, height, bitrate, framerate: VIDEO_FPS, avc: { format: 'annexb' } };
     try {
       if ((await VideoEncoder.isConfigSupported(config)).supported) return config;
     } catch {
@@ -94,10 +94,62 @@ export async function exportPlaybackVideo(job: VideoJob): Promise<Blob> {
     target,
     video: { codec: 'avc', width, height, frameRate: VIDEO_FPS },
     fastStart: 'in-memory',
+    // The first decode timestamp becomes 0 (Firefox's first chunk starts at 1/30 s, and with B-frames
+    // the decode times start before the first picture).
+    firstTimestampBehavior: 'offset',
   });
   let encodeError: unknown = null;
+  // The encoder writes Annex B (SPS and PPS inside each keyframe); the MP4 header (avcC) is built from them
+  // here. Not every browser hands over a ready-made header (Firefox gives no decoderConfig).
+  let description: Uint8Array | null = null;
+  // Some encoders (Firefox) use B-frames: chunks come in decode order, which differs from the picture order.
+  // The MP4 file then needs a decode time per chunk. With a constant frame rate the k-th chunk is decoded at
+  // first + (k - reorder) frames, where `reorder` is how many frames the encoder holds back. It is measured
+  // on the first PROBE chunks (0 in Chrome, Edge and Safari, which don't reorder).
+  const FRAME_US = 1e6 / VIDEO_FPS;
+  const PROBE = 8;
+  type Chunk = { data: Uint8Array; type: EncodedVideoChunkType; pts: number; header?: EncodedVideoChunkMetadata };
+  const probe: Chunk[] = [];
+  let reorder: number | null = null;
+  let firstPts = 0;
+  let decoded = 0;
+  const mux = (c: Chunk) => {
+    const dts = firstPts + Math.round((decoded++ - reorder!) * FRAME_US);
+    if (c.pts < dts - 2) throw new Error('The video encoder reorders frames more than expected.');
+    // pts - offset = dts; never below 0 (a rounding difference of a microsecond is fine).
+    muxer.addVideoChunkRaw(c.data, c.type, c.pts, Math.round(FRAME_US), c.header, Math.max(0, c.pts - dts));
+  };
+  const settle = () => {
+    if (reorder !== null) return;
+    firstPts = probe.length ? probe[0].pts : 0;
+    reorder = 0;
+    probe.forEach((c, k) => {
+      reorder = Math.max(reorder!, Math.ceil(k - (c.pts - firstPts) / FRAME_US - 0.01));
+    });
+    probe.splice(0).forEach(mux);
+  };
   const encoder = new VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    output: (chunk, meta) => {
+      try {
+        const data = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(data);
+        const nals = splitAnnexB(data);
+        let header: EncodedVideoChunkMetadata | undefined;
+        if (!description) {
+          description = avcConfig(nals);
+          if (!description) throw new Error('The video encoder gave no SPS/PPS with its first frame.');
+          header = { decoderConfig: { codec: meta?.decoderConfig?.codec ?? config.codec, codedWidth: width, codedHeight: height, description } };
+        }
+        const c: Chunk = { data: toAvcSample(nals), type: chunk.type, pts: chunk.timestamp, header };
+        if (reorder !== null) mux(c);
+        else {
+          probe.push(c);
+          if (probe.length >= PROBE) settle();
+        }
+      } catch (e) {
+        encodeError = e;
+      }
+    },
     error: (e) => (encodeError = e),
   });
   encoder.configure(config);
@@ -143,6 +195,7 @@ export async function exportPlaybackVideo(job: VideoJob): Promise<Blob> {
     }
     await encoder.flush();
     if (encodeError) throw encodeError;
+    settle(); // a video shorter than the probe
     muxer.finalize();
     onProgress(1);
     return new Blob([target.buffer], { type: 'video/mp4' });
@@ -261,4 +314,56 @@ function drawOverlay(ctx: CanvasRenderingContext2D, o: Overlay) {
     ctx.fillText(o.attribution, o.width - s(6), o.height - s(4), o.width - s(12));
   }
   ctx.restore();
+}
+
+/* ---- H.264 helpers: Annex B (start codes) to MP4 (length-prefixed NAL units plus an avcC header) */
+
+/** The NAL units of an Annex B buffer, without their start codes. */
+function splitAnnexB(b: Uint8Array): Uint8Array[] {
+  const starts: [number, number][] = []; // [start code position, payload position]
+  for (let i = 0; i + 2 < b.length; i++) {
+    if (b[i] === 0 && b[i + 1] === 0) {
+      if (b[i + 2] === 1) {
+        starts.push([i, i + 3]);
+        i += 2;
+      } else if (b[i + 2] === 0 && b[i + 3] === 1) {
+        starts.push([i, i + 4]);
+        i += 3;
+      }
+    }
+  }
+  if (!starts.length) return [b]; // already one bare NAL unit
+  return starts.map(([, p], k) => b.subarray(p, k + 1 < starts.length ? starts[k + 1][0] : b.length));
+}
+
+const nalType = (n: Uint8Array) => n[0] & 0x1f;
+const SPS = 7, PPS = 8, AUD = 9;
+
+/** A sample for the MP4 file: each NAL unit with a 4-byte length, without SPS/PPS/AUD (those go in avcC). */
+function toAvcSample(nals: Uint8Array[]): Uint8Array {
+  const keep = nals.filter((n) => n.length && ![SPS, PPS, AUD].includes(nalType(n)));
+  const out = new Uint8Array(keep.reduce((sum, n) => sum + 4 + n.length, 0));
+  const view = new DataView(out.buffer);
+  let o = 0;
+  for (const n of keep) {
+    view.setUint32(o, n.length);
+    out.set(n, o + 4);
+    o += 4 + n.length;
+  }
+  return out;
+}
+
+/** The avcC record (AVCDecoderConfigurationRecord) from the SPS and PPS of a keyframe, or null if it has none. */
+function avcConfig(nals: Uint8Array[]): Uint8Array | null {
+  const sps = nals.filter((n) => nalType(n) === SPS);
+  const pps = nals.filter((n) => nalType(n) === PPS);
+  if (!sps.length || !pps.length) return null;
+  const profile = sps[0][1];
+  const bytes: number[] = [1, profile, sps[0][2], sps[0][3], 0xff, 0xe0 | sps.length];
+  for (const n of sps) bytes.push(n.length >> 8, n.length & 0xff, ...n);
+  bytes.push(pps.length);
+  for (const n of pps) bytes.push(n.length >> 8, n.length & 0xff, ...n);
+  // High profiles add chroma format and bit depths: we always encode 8-bit 4:2:0.
+  if ([100, 110, 122, 144].includes(profile)) bytes.push(0xfc | 1, 0xf8, 0xf8, 0);
+  return new Uint8Array(bytes);
 }
