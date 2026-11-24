@@ -103,6 +103,44 @@ const baseLayers = (b: Basemap) => (b.labels ? [`base-${b.id}`, `base-${b.id}-la
 
 const EMPTY = { type: 'FeatureCollection' as const, features: [] };
 
+/** Zoom levels per click of the + and − buttons (MapLibre's own buttons always zoom by 1). */
+const ZOOM_STEP = 0.5;
+
+/** + and − buttons like MapLibre's, with a finer step; they use MapLibre's classes, so they look the same. */
+class ZoomControl implements maplibregl.IControl {
+  private box?: HTMLDivElement;
+
+  onAdd(map: MlMap) {
+    const box = document.createElement('div');
+    box.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+    const button = (cls: string, label: string, step: number) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = cls;
+      b.title = label;
+      b.setAttribute('aria-label', label);
+      b.innerHTML = '<span class="maplibregl-ctrl-icon" aria-hidden="true"></span>';
+      b.addEventListener('click', () => map.easeTo({ zoom: map.getZoom() + step, duration: 250 }));
+      box.appendChild(b);
+      return b;
+    };
+    const zoomIn = button('maplibregl-ctrl-zoom-in', 'Zoom in', ZOOM_STEP);
+    const zoomOut = button('maplibregl-ctrl-zoom-out', 'Zoom out', -ZOOM_STEP);
+    const update = () => {
+      zoomIn.disabled = map.getZoom() >= map.getMaxZoom();
+      zoomOut.disabled = map.getZoom() <= map.getMinZoom();
+    };
+    map.on('zoom', update);
+    update();
+    this.box = box;
+    return box;
+  }
+
+  onRemove() {
+    this.box?.remove();
+  }
+}
+
 /** A road's status: the playback status (feature-state "pb") while playing back, else the live one. */
 const STATUS: ExpressionSpecification = ['coalesce', ['feature-state', 'pb'], ['get', 'status']];
 const IS_NEUTRAL: ExpressionSpecification = ['==', STATUS, 'neutral'];
@@ -289,10 +327,14 @@ export default function RoadMap(props: Props) {
       attributionControl: { compact: true },
     });
     mapRef.current = map;
+    // Gentler zoom than MapLibre's defaults (wheel 1/450, trackpad 1/100): about half as fast.
+    map.scrollZoom.setWheelZoomRate(1 / 900);
+    map.scrollZoom.setZoomRate(1 / 200);
     // The map's box changes when the sidebar opens or closes, or the window is resized.
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(container.current!);
-    map.addControl(new maplibregl.NavigationControl(), 'top-right');
+    map.addControl(new ZoomControl(), 'top-right');
+    map.addControl(new maplibregl.NavigationControl({ showZoom: false }), 'top-right'); // compass only
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 
     map.on('load', () => {
